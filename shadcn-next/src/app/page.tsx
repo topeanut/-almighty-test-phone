@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 
 import { MotivationBanner } from "@/components/motivation-banner";
 import { Button } from "@/components/ui/button";
@@ -24,13 +25,62 @@ import {
 } from "@/components/ui/select";
 
 const PHONES = [
-  { id: "a01", label: "A01", platform: "android" },
-  { id: "a02", label: "A02", platform: "android" },
-  { id: "a03", label: "A03", platform: "android" },
-  { id: "a04", label: "A04", platform: "android" },
-  { id: "i01", label: "I01", platform: "ios" },
-  { id: "i02", label: "I02", platform: "ios" },
-  { id: "i03", label: "I03", platform: "ios" },
+  {
+    id: "a01",
+    label: "A01",
+    platform: "android",
+    model: "갤럭시 S8",
+    color: "미드나이트 블랙",
+    image: "/devices/a01-s8.avif",
+  },
+  {
+    id: "a02",
+    label: "A02",
+    platform: "android",
+    model: "갤럭시 S9",
+    color: "선라이즈 골드",
+    image: "/devices/a02-s9.jpg",
+  },
+  {
+    id: "a03",
+    label: "A03",
+    platform: "android",
+    model: "갤럭시 S10 5G",
+    color: "크라운 골드",
+    image: "/devices/a03-s10.jpg",
+  },
+  {
+    id: "a04",
+    label: "A04",
+    platform: "android",
+    model: "LG V50 ThinQ",
+    color: "아스트로 블랙",
+    image: "/devices/a04-v50.webp",
+  },
+  {
+    id: "i01",
+    label: "I01",
+    platform: "ios",
+    model: "아이폰 SE",
+    color: "PRODUCT(RED)",
+    image: "/devices/i01_se1.jpeg",
+  },
+  {
+    id: "i02",
+    label: "I02",
+    platform: "ios",
+    model: "아이폰 X",
+    color: "스페이스 그레이",
+    image: "/devices/i02-X.webp",
+  },
+  {
+    id: "i03",
+    label: "I03",
+    platform: "ios",
+    model: "아이폰 12 mini",
+    color: "블랙",
+    image: "/devices/i03-12mini.avif",
+  },
 ] as const;
 
 type PhoneDefinition = (typeof PHONES)[number];
@@ -88,8 +138,6 @@ type BorrowerOrgOption = "프론트엔드팀" | "백엔드팀" | "QA" | "기타"
 
 const BORROWERS_STORAGE_KEY = "test-phone-borrowers";
 const PHONE_STORAGE_KEY = "test-phone-statuses";
-const AUTO_RETURN_HOUR = 19;
-const AUTO_RETURN_MINUTE = 10;
 const BORROWER_ORG_OPTIONS: BorrowerOrgOption[] = [
   "프론트엔드팀",
   "백엔드팀",
@@ -97,11 +145,8 @@ const BORROWER_ORG_OPTIONS: BorrowerOrgOption[] = [
   "기타",
 ];
 const MOTIVATION_MESSAGES = [
-  "지금도 충분히 잘하고 계세요!",
-  "당신이 최고고 정말 멋지세요!",
-  "오늘도 고생 많으세요!",
-  "지금 이 모습 그대로 멋있어요!",
-  "정말 멋진 분이시라는 말을 드리고 싶어요!",
+  "상태 초기화 버그 수정 완료",
+  "롤링 배너 구매 문의",
 ];
 
 const PLATFORM_LABELS: Record<Platform, string> = {
@@ -169,15 +214,6 @@ const formatClock = (date: Date) =>
     minute: "2-digit",
   });
 
-const getLastAutoReturnCutoff = (now: Date) => {
-  const cutoff = new Date(now);
-  cutoff.setHours(AUTO_RETURN_HOUR, AUTO_RETURN_MINUTE, 0, 0);
-  if (now < cutoff) {
-    cutoff.setDate(cutoff.getDate() - 1);
-  }
-  return cutoff;
-};
-
 const ensurePhoneState = (map: PhoneStateMap, phoneId: PhoneId) =>
   map[phoneId] ?? { id: phoneId, status: "available" };
 
@@ -206,6 +242,8 @@ export default function Home() {
     React.useState<BorrowerOrgOption>("프론트엔드팀");
   const [borrowerOrgCustom, setBorrowerOrgCustom] = React.useState("");
   const [borrowerError, setBorrowerError] = React.useState<string | null>(null);
+  const [returnConfirmPhoneId, setReturnConfirmPhoneId] =
+    React.useState<PhoneId | null>(null);
 
   const openPhoneDialog = React.useCallback(
     (phoneId: PhoneId, mode: "borrow" | "manage") => {
@@ -273,45 +311,6 @@ export default function Home() {
     if (!hydrated) return;
     window.localStorage.setItem(PHONE_STORAGE_KEY, JSON.stringify(phones));
   }, [phones, hydrated]);
-
-  const applyAutoReturn = React.useCallback((state: PhoneStateMap) => {
-    const now = new Date();
-    const cutoff = getLastAutoReturnCutoff(now);
-    let changed = false;
-    const result: PhoneStateMap = { ...state };
-
-    for (const phone of PHONES) {
-      const current = ensurePhoneState(state, phone.id);
-      if (current.status === "borrowed" && current.currentLoan) {
-        if (now >= cutoff) {
-          result[phone.id] = {
-            id: phone.id,
-            status: "available",
-            lastReturn: {
-              borrowerId: current.currentLoan.borrowerId,
-              returnedAt: cutoff.toISOString(),
-            },
-          };
-          changed = true;
-          continue;
-        }
-      }
-
-      result[phone.id] = current;
-    }
-
-    return changed ? result : state;
-  }, []);
-
-  React.useEffect(() => {
-    if (!hydrated) return;
-    const run = () => {
-      setPhones((prev) => applyAutoReturn(prev));
-    };
-    run();
-    const interval = window.setInterval(run, 60_000);
-    return () => window.clearInterval(interval);
-  }, [applyAutoReturn, hydrated]);
 
   React.useEffect(() => {
     if (!phoneDialogOpen || !selectedPhoneId) {
@@ -393,8 +392,15 @@ export default function Home() {
 
   const handleManualReturn = () => {
     if (!selectedPhoneId) return;
-    handleReturnLoan(selectedPhoneId);
+    const targetPhoneId = selectedPhoneId;
     closePhoneDialog();
+    setReturnConfirmPhoneId(targetPhoneId);
+  };
+
+  const finalizeReturn = () => {
+    if (!returnConfirmPhoneId) return;
+    handleReturnLoan(returnConfirmPhoneId);
+    setReturnConfirmPhoneId(null);
   };
 
   const handleAddBorrower = () => {
@@ -468,7 +474,7 @@ export default function Home() {
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-8">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          <h1 className="text-xl font-semibold tracking-tight sm:text-3xl">
             전능아이티 테스트폰 이력관리
           </h1>
           <MotivationBanner messages={MOTIVATION_MESSAGES} />
@@ -505,6 +511,9 @@ export default function Home() {
                     <h2 className="mt-1 text-2xl font-semibold">
                       {phone.label}
                     </h2>
+                    <p className="text-sm text-muted-foreground">
+                      {phone.model} · {phone.color}
+                    </p>
                   </div>
                   <span
                     className={cn(
@@ -516,6 +525,18 @@ export default function Home() {
                   >
                     {isBorrowed ? "대여 중" : "대여 가능"}
                   </span>
+                </div>
+
+                <div className="mt-4 flex flex-1 items-center justify-center">
+                  <div className="relative h-40 w-20 sm:h-44 sm:w-24">
+                    <Image
+                      src={phone.image}
+                      alt={`${phone.model} ${phone.color}`}
+                      fill
+                      sizes="(max-width: 640px) 80px, 96px"
+                      className="object-contain drop-shadow-md"
+                    />
+                  </div>
                 </div>
 
                 <div className="mt-4 flex-1 space-y-2.5 text-sm">
@@ -597,7 +618,7 @@ export default function Home() {
                 <div className="space-y-1.5 text-xs sm:text-sm">
                   <p className="font-semibold">대여 규칙</p>
                   <p>· 반드시 대여를 신청하고 대여한다.</p>
-                  <p>· 오후 7시 10분에는 자동으로 반납처리된다.</p>
+                  <p>· 반납 시에는 직접 반납하기 버튼을 눌러 처리한다.</p>
                 </div>
               </div>
             </div>
@@ -609,7 +630,7 @@ export default function Home() {
         open={phoneDialogOpen}
         onOpenChange={(open) => !open && closePhoneDialog()}
       >
-        <DialogContent>
+        <DialogContent className="max-w-3xl sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>
               {phoneDialogMode === "manage"
@@ -647,39 +668,43 @@ export default function Home() {
             </div>
           )}
 
-          <div className="space-y-2">
+          <div className="space-y-3">
             <Label>대여자 선택</Label>
-            <div className="max-h-64 overflow-y-auto rounded-md border">
+            <div className="max-h-[480px] overflow-y-auto rounded-xl border p-4">
               {borrowers.length === 0 ? (
-                <p className="p-3 text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   먼저 대여자를 등록해야 대여를 진행할 수 있습니다.
                 </p>
               ) : (
-                <ul className="divide-y">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {borrowers.map((borrower) => (
-                    <li key={borrower.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedBorrowerId(borrower.id)}
-                        className={cn(
-                          "flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition",
-                          selectedBorrowerId === borrower.id
-                            ? "bg-primary/10 text-primary"
-                            : "hover:bg-muted"
-                        )}
-                      >
-                        <span>
-                          {borrower.organization} - {borrower.name}
+                    <button
+                      key={borrower.id}
+                      type="button"
+                      onClick={() => setSelectedBorrowerId(borrower.id)}
+                      className={cn(
+                        "flex h-full flex-col justify-between rounded-lg border p-3 text-left shadow-sm transition",
+                        selectedBorrowerId === borrower.id
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "hover:border-primary/60"
+                      )}
+                    >
+                      <div>
+                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                          {borrower.organization}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">
+                          {borrower.name}
+                        </p>
+                      </div>
+                      {selectedBorrowerId === borrower.id && (
+                        <span className="mt-2 text-[10px] font-semibold uppercase text-primary">
+                          선택됨
                         </span>
-                        {selectedBorrowerId === borrower.id && (
-                          <span className="text-[11px] font-medium">
-                            선택됨
-                          </span>
-                        )}
-                      </button>
-                    </li>
+                      )}
+                    </button>
                   ))}
-                </ul>
+                </div>
               )}
             </div>
           </div>
@@ -726,7 +751,7 @@ export default function Home() {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-w-2xl sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>대여자 관리</DialogTitle>
             <DialogDescription>
@@ -795,7 +820,7 @@ export default function Home() {
                   아직 등록된 대여자가 없습니다.
                 </p>
               ) : (
-                <ul className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                <ul className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
                   {borrowers.map((borrower) => {
                     const inUse = isBorrowerInUse(borrower.id);
                     return (
@@ -833,6 +858,38 @@ export default function Home() {
             >
               닫기
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={returnConfirmPhoneId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReturnConfirmPhoneId(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>충전기 연결 확인</DialogTitle>
+            <DialogDescription>
+              반납 전에 충전기를 연결했는지 확인해 주세요.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-lg border bg-muted/40 p-4 text-sm">
+            <p className="font-medium">충전기를 연결하셨나요?</p>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setReturnConfirmPhoneId(null)}
+            >
+              아직이에요
+            </Button>
+            <Button onClick={finalizeReturn}>충전 완료</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
