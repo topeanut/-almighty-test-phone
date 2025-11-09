@@ -504,7 +504,7 @@ export default function Home() {
                 className="group flex h-full flex-col rounded-xl border p-5 text-left shadow-sm transition hover:border-primary hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="flex items-start justify-between gap-4">
-                  <div>
+                  <div className="flex-1">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       {PLATFORM_LABELS[phone.platform]}
                     </p>
@@ -515,6 +515,68 @@ export default function Home() {
                       {phone.model} · {phone.color}
                     </p>
                   </div>
+                </div>
+
+                <div className="mt-4 flex flex-1 items-center justify-between">
+                  <div className="flex-1 space-y-2.5 text-sm">
+                    {isBorrowed ? (
+                      <>
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">
+                            대여자
+                          </p>
+                          <p className="text-sm font-semibold">
+                            {borrower
+                              ? `${borrower.name} · ${borrower.organization}`
+                              : "삭제된 대여자"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">
+                            대여 시작
+                          </p>
+                          <p>{formatDateTime(state.currentLoan?.borrowedAt)}</p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold text-primary">
+                          탭하여 대여자를 선택하세요
+                        </p>
+                        <div className="rounded-lg bg-muted/40 p-2.5">
+                          <p className="text-[11px] text-muted-foreground">
+                            마지막 반납
+                          </p>
+                          <p className="text-xs font-medium sm:text-sm">
+                            {state.lastReturn
+                              ? formatDateTime(state.lastReturn.returnedAt)
+                              : "기록 없음"}
+                          </p>
+                          {state.lastReturn && (
+                            <p className="text-[11px] text-muted-foreground">
+                              {lastBorrower
+                                ? `${lastBorrower.name} · ${lastBorrower.organization}`
+                                : "삭제된 대여자"}
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="flex-shrink-0">
+                    <Image
+                      src={phone.image}
+                      alt={`${phone.model} ${phone.color}`}
+                      width={160}
+                      height={320}
+                      className="h-40 w-auto object-contain drop-shadow-md sm:h-44"
+                      priority={false}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-3 text-right">
                   <span
                     className={cn(
                       "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold",
@@ -527,65 +589,7 @@ export default function Home() {
                   </span>
                 </div>
 
-                <div className="mt-4 flex flex-1 items-center justify-center">
-                  <div className="relative h-40 w-20 sm:h-44 sm:w-24">
-                    <Image
-                      src={phone.image}
-                      alt={`${phone.model} ${phone.color}`}
-                      fill
-                      sizes="(max-width: 640px) 80px, 96px"
-                      className="object-contain drop-shadow-md"
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-4 flex-1 space-y-2.5 text-sm">
-                  {isBorrowed ? (
-                    <>
-                      <div>
-                        <p className="text-[11px] text-muted-foreground">
-                          대여자
-                        </p>
-                        <p className="text-sm font-semibold">
-                          {borrower
-                            ? `${borrower.name} · ${borrower.organization}`
-                            : "삭제된 대여자"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[11px] text-muted-foreground">
-                          대여 시작
-                        </p>
-                        <p>{formatDateTime(state.currentLoan?.borrowedAt)}</p>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm font-semibold text-primary">
-                        탭하여 대여자를 선택하세요
-                      </p>
-                      <div className="rounded-lg bg-muted/40 p-2.5">
-                        <p className="text-[11px] text-muted-foreground">
-                          마지막 반납
-                        </p>
-                        <p className="text-xs font-medium sm:text-sm">
-                          {state.lastReturn
-                            ? formatDateTime(state.lastReturn.returnedAt)
-                            : "기록 없음"}
-                        </p>
-                        {state.lastReturn && (
-                          <p className="text-[11px] text-muted-foreground">
-                            {lastBorrower
-                              ? `${lastBorrower.name} · ${lastBorrower.organization}`
-                              : "삭제된 대여자"}
-                          </p>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                <p className="mt-4 text-[11px] text-muted-foreground">
+                <p className="mt-2 text-[11px] text-muted-foreground">
                   {isBorrowed
                     ? "누르면 반납하거나 대여자를 변경할 수 있어요."
                     : "누르면 대여자를 선택해 대여할 수 있어요."}
@@ -617,8 +621,8 @@ export default function Home() {
 
                 <div className="space-y-1.5 text-xs sm:text-sm">
                   <p className="font-semibold">대여 규칙</p>
-                  <p>· 반드시 대여를 신청하고 대여한다.</p>
-                  <p>· 반납 시에는 직접 반납하기 버튼을 눌러 처리한다.</p>
+                  <p>· 반드시 대여를 신청하고 대여합니다.</p>
+                  <p>· 반납 시에는 직접 반납하기 버튼을 눌러 처리합니다.</p>
                 </div>
               </div>
             </div>
