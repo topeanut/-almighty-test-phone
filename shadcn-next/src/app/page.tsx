@@ -145,6 +145,7 @@ type BorrowerOrgOption = "프론트엔드팀" | "백엔드팀" | "QA" | "기타"
 
 const BORROWERS_STORAGE_KEY = "test-phone-borrowers";
 const PHONE_STORAGE_KEY = "test-phone-statuses";
+const BANNER_STORAGE_KEY = "test-phone-banner-messages";
 const BORROWER_ORG_OPTIONS: BorrowerOrgOption[] = [
   "프론트엔드팀",
   "백엔드팀",
@@ -251,6 +252,11 @@ export default function Home() {
   const [borrowerError, setBorrowerError] = React.useState<string | null>(null);
   const [returnConfirmPhoneId, setReturnConfirmPhoneId] =
     React.useState<PhoneId | null>(null);
+  const [returnConfirmTimer, setReturnConfirmTimer] = React.useState(3);
+  const [bannerMessages, setBannerMessages] =
+    React.useState<string[]>(MOTIVATION_MESSAGES);
+  const [bannerDialogOpen, setBannerDialogOpen] = React.useState(false);
+  const [bannerInput, setBannerInput] = React.useState("");
 
   const openPhoneDialog = React.useCallback(
     (phoneId: PhoneId, mode: "borrow" | "manage") => {
@@ -267,6 +273,24 @@ export default function Home() {
     setSelectedPhoneId(null);
     setSelectedBorrowerId(null);
   }, []);
+
+  React.useEffect(() => {
+    if (!returnConfirmPhoneId) {
+      setReturnConfirmTimer(3);
+      return;
+    }
+    setReturnConfirmTimer(3);
+    const interval = window.setInterval(() => {
+      setReturnConfirmTimer((prev) => {
+        if (prev <= 1) {
+          window.clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1_000);
+    return () => window.clearInterval(interval);
+  }, [returnConfirmPhoneId]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -294,6 +318,20 @@ export default function Home() {
       console.error("Failed to load phone statuses", error);
     }
 
+    try {
+      const storedBanner = window.localStorage.getItem(BANNER_STORAGE_KEY);
+      if (storedBanner) {
+        const parsed = JSON.parse(storedBanner);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setBannerMessages(
+            parsed.filter((msg): msg is string => typeof msg === "string")
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load banner messages", error);
+    }
+
     setHydrated(true);
     setCurrentTime(new Date());
   }, []);
@@ -318,6 +356,14 @@ export default function Home() {
     if (!hydrated) return;
     window.localStorage.setItem(PHONE_STORAGE_KEY, JSON.stringify(phones));
   }, [phones, hydrated]);
+
+  React.useEffect(() => {
+    if (!hydrated) return;
+    window.localStorage.setItem(
+      BANNER_STORAGE_KEY,
+      JSON.stringify(bannerMessages)
+    );
+  }, [bannerMessages, hydrated]);
 
   React.useEffect(() => {
     if (!phoneDialogOpen || !selectedPhoneId) {
@@ -410,6 +456,17 @@ export default function Home() {
     setReturnConfirmPhoneId(null);
   };
 
+  const handleAddBannerMessage = () => {
+    const message = bannerInput.trim();
+    if (!message) return;
+    setBannerMessages((prev) => {
+      if (prev.includes(message)) return prev;
+      return [...prev, message];
+    });
+    setBannerInput("");
+    setBannerDialogOpen(false);
+  };
+
   const handleAddBorrower = () => {
     const name = borrowerName.trim();
     const organization =
@@ -480,11 +537,19 @@ export default function Home() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-8">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+        <div className="flex flex-col gap-2">
           <h1 className="text-xl font-semibold tracking-tight sm:text-3xl">
             전능아이티 테스트폰 이력관리
           </h1>
-          <MotivationBanner messages={MOTIVATION_MESSAGES} />
+          <MotivationBanner messages={bannerMessages} />
+          <Button
+            variant="link"
+            size="sm"
+            className="justify-start px-0 text-xs text-muted-foreground underline-offset-4 hover:text-primary"
+            onClick={() => setBannerDialogOpen(true)}
+          >
+            응원 문구 직접 추가하기
+          </Button>
         </div>
         <span className="text-sm text-muted-foreground">
           현재 시각 {formatClock(currentTime)}
@@ -500,6 +565,17 @@ export default function Home() {
             const isBorrowed = state.status === "borrowed" && state.currentLoan;
             const borrower = getBorrower(state.currentLoan?.borrowerId);
             const lastBorrower = getBorrower(state.lastReturn?.borrowerId);
+            const imageSize =
+              phone.imageSize ??
+              ({ width: 360, height: 360, displayHeight: 176 } as {
+                width: number;
+                height: number;
+                displayHeight?: number;
+              });
+            const displayHeight =
+              imageSize.displayHeight !== undefined
+                ? imageSize.displayHeight
+                : 176;
 
             return (
               <button
@@ -575,10 +651,10 @@ export default function Home() {
                     <Image
                       src={phone.image}
                       alt={`${phone.model} ${phone.color}`}
-                      width={100}
-                      height={100}
-                      className="h-40 w-auto object-contain drop-shadow-"
-                      priority={false}
+                      width={imageSize.width}
+                      height={imageSize.height}
+                      className="w-auto object-contain drop-shadow-"
+                      style={{ height: displayHeight }}
                     />
                   </div>
                 </div>
@@ -874,6 +950,56 @@ export default function Home() {
       </Dialog>
 
       <Dialog
+        open={bannerDialogOpen}
+        onOpenChange={(open) => {
+          setBannerDialogOpen(open);
+          if (!open) {
+            setBannerInput("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>응원 문구 추가</DialogTitle>
+            <DialogDescription>
+              롤링 배너에 표시할 문구를 입력해 주세요.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="grid gap-2">
+              <Label htmlFor="banner-message">응원 문구</Label>
+              <Input
+                id="banner-message"
+                value={bannerInput}
+                onChange={(event) => setBannerInput(event.target.value)}
+                placeholder="예: 오늘도 최고의 QA 팀입니다!"
+                maxLength={80}
+              />
+              <p className="text-xs text-muted-foreground">
+                최대 80자까지 입력할 수 있습니다.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setBannerDialogOpen(false)}
+            >
+              취소
+            </Button>
+            <Button
+              onClick={handleAddBannerMessage}
+              disabled={!bannerInput.trim()}
+            >
+              추가하기
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={returnConfirmPhoneId !== null}
         onOpenChange={(open) => {
           if (!open) {
@@ -900,7 +1026,11 @@ export default function Home() {
             >
               아직이에요
             </Button>
-            <Button onClick={finalizeReturn}>충전 완료</Button>
+            <Button onClick={finalizeReturn} disabled={returnConfirmTimer > 0}>
+              {returnConfirmTimer > 0
+                ? `확인 중... ${returnConfirmTimer}s`
+                : "충전 완료"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
