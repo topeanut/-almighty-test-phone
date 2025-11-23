@@ -548,7 +548,7 @@ export default function Home() {
             className="justify-start px-0 text-xs text-muted-foreground underline-offset-4 hover:text-primary"
             onClick={() => setBannerDialogOpen(true)}
           >
-            응원 문구 직접 추가하기
+            롤링 배너 직접 추가하기
           </Button>
         </div>
         <span className="text-sm text-muted-foreground">
