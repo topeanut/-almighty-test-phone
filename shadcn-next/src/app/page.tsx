@@ -252,7 +252,6 @@ export default function Home() {
   const [borrowerError, setBorrowerError] = React.useState<string | null>(null);
   const [returnConfirmPhoneId, setReturnConfirmPhoneId] =
     React.useState<PhoneId | null>(null);
-  const [returnConfirmTimer, setReturnConfirmTimer] = React.useState(3);
   const [bannerMessages, setBannerMessages] =
     React.useState<string[]>(MOTIVATION_MESSAGES);
   const [bannerDialogOpen, setBannerDialogOpen] = React.useState(false);
@@ -273,24 +272,6 @@ export default function Home() {
     setSelectedPhoneId(null);
     setSelectedBorrowerId(null);
   }, []);
-
-  React.useEffect(() => {
-    if (!returnConfirmPhoneId) {
-      setReturnConfirmTimer(3);
-      return;
-    }
-    setReturnConfirmTimer(3);
-    const interval = window.setInterval(() => {
-      setReturnConfirmTimer((prev) => {
-        if (prev <= 1) {
-          window.clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1_000);
-    return () => window.clearInterval(interval);
-  }, [returnConfirmPhoneId]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1026,11 +1007,7 @@ export default function Home() {
             >
               아직이에요
             </Button>
-            <Button onClick={finalizeReturn} disabled={returnConfirmTimer > 0}>
-              {returnConfirmTimer > 0
-                ? `확인 중... ${returnConfirmTimer}s`
-                : "충전 완료"}
-            </Button>
+            <Button onClick={finalizeReturn}>충전 완료</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
