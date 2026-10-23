@@ -5,6 +5,7 @@ import Image from "next/image";
 
 import { MotivationBanner } from "@/components/motivation-banner";
 import { Button } from "@/components/ui/button";
+import { loanDays, loanLabel, loanTone } from "@/lib/loan-age";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -83,13 +84,9 @@ const formatCardDateTime = (value?: string) => {
 };
 
 const formatClock = (date: Date) =>
-  date.toLocaleString("ko-KR", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  `${date.getMonth() + 1}/${date.getDate()} (${date.toLocaleDateString("ko-KR", {
+    weekday: "short",
+  })}) ${date.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" })}`;
 
 export default function Home() {
   const [borrowers, setBorrowers] = React.useState<Borrower[]>([]);
@@ -110,6 +107,7 @@ export default function Home() {
     string | null
   >(null);
 
+  const [borrowerQuery, setBorrowerQuery] = React.useState("");
   const [borrowerDialogOpen, setBorrowerDialogOpen] = React.useState(false);
   const [borrowerName, setBorrowerName] = React.useState("");
   const [borrowerOrgOption, setBorrowerOrgOption] =
@@ -223,6 +221,7 @@ export default function Home() {
     setPhoneDialogMode(null);
     setSelectedPhoneId(null);
     setSelectedBorrowerId(null);
+    setBorrowerQuery("");
   }, []);
 
   React.useEffect(() => {
@@ -380,6 +379,17 @@ export default function Home() {
     [borrowers]
   );
 
+  const query = borrowerQuery.trim();
+  // 검색해도 이미 선택한 대여자는 목록에서 사라지지 않게 남겨 둔다.
+  const visibleBorrowers = query
+    ? borrowers.filter(
+        (borrower) =>
+          borrower.name.includes(query) ||
+          borrower.organization.includes(query) ||
+          borrower.id === effectiveSelectedBorrowerId
+      )
+    : borrowers;
+
   const currentDialogPhone = selectedPhoneId
     ? ensurePhoneState(phones, selectedPhoneId)
     : null;
@@ -394,48 +404,48 @@ export default function Home() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-8">
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-col gap-2">
+      <header className="flex flex-col gap-2">
+        <div className="flex items-start justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight sm:text-3xl">
             전능아이티 테스트폰 이력관리
           </h1>
-          <div className="w-full max-w-full rounded-md bg-amber-500/15 px-3 py-1 text-sm font-semibold text-amber-800 sm:w-[36rem] sm:py-1.5 dark:text-amber-300">
-            <p>테스트폰 비밀번호 · 네자리 0727 · 여섯자리 000000 · 패턴 2489</p>
-            <p>오른쪽에 있는 종이는 쓰지 않으셔도 됩니다. 구시대의 유물입니다.</p>
-          </div>
-          <MotivationBanner messages={bannerMessages} />
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <Button
-              variant="link"
-              size="sm"
-              className="justify-start px-0 text-xs text-muted-foreground underline-offset-4 hover:text-primary"
-              onClick={() => setBannerDialogOpen(true)}
-              disabled={offline}
-            >
-              롤링 배너 추가하기
-            </Button>
-            <Button
-              variant="link"
-              size="sm"
-              className="justify-start px-0 text-xs text-muted-foreground underline-offset-4 hover:text-primary"
-              onClick={() => setBorrowerDialogOpen(true)}
-              disabled={offline}
-            >
-              대여자 등록하기
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              대여 규칙 · 반드시 대여 신청 후 가져가고, 반납할 땐 반납하기 버튼을 눌러주세요.
+          <div className="flex shrink-0 items-center gap-2 pt-1">
+            {offline && (
+              <span className="rounded-full bg-destructive px-3 py-1 text-xs font-semibold text-destructive-foreground">
+                서버 연결 끊김
+              </span>
+            )}
+            <span className="whitespace-nowrap text-sm tabular-nums text-muted-foreground">
+              {formatClock(currentTime)}
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {offline && (
-            <span className="rounded-full bg-destructive px-3 py-1 text-xs font-semibold text-destructive-foreground">
-              서버 연결 끊김
-            </span>
-          )}
-          <span className="text-sm text-muted-foreground">
-            현재 시각 {formatClock(currentTime)}
+        <div className="rounded-md bg-amber-500/15 px-3 py-1.5 text-sm font-semibold text-amber-300 lg:flex lg:gap-6">
+          <p>테스트폰 비밀번호 · 네자리 0727 · 여섯자리 000000 · 패턴 2489</p>
+          <p>오른쪽에 있는 종이는 쓰지 않으셔도 됩니다. 구시대의 유물입니다.</p>
+        </div>
+        <MotivationBanner messages={bannerMessages} />
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <Button
+            variant="link"
+            size="sm"
+            className="justify-start px-0 text-xs text-muted-foreground underline-offset-4 hover:text-primary"
+            onClick={() => setBannerDialogOpen(true)}
+            disabled={offline}
+          >
+            롤링 배너 관리
+          </Button>
+          <Button
+            variant="link"
+            size="sm"
+            className="justify-start px-0 text-xs text-muted-foreground underline-offset-4 hover:text-primary"
+            onClick={() => setBorrowerDialogOpen(true)}
+            disabled={offline}
+          >
+            대여자 등록하기
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            대여 규칙 · 반드시 대여 신청 후 가져가고, 반납할 땐 반납하기 버튼을 눌러주세요.
           </span>
         </div>
       </header>
@@ -444,7 +454,16 @@ export default function Home() {
         {PHONE_GROUPS.map((group) => (
           <section key={group.platform} className="space-y-2">
             <h2 className="text-sm font-semibold text-muted-foreground">
-              {PLATFORM_LABELS[group.platform]} {group.phones.length}대
+              {PLATFORM_LABELS[group.platform]} {group.phones.length}대 ·{" "}
+              <span className="text-emerald-400">
+                대여 가능{" "}
+                {
+                  group.phones.filter(
+                    (phone) =>
+                      ensurePhoneState(phones, phone.id).status !== "borrowed"
+                  ).length
+                }
+              </span>
             </h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
               {group.phones.map((phone) => {
@@ -452,6 +471,7 @@ export default function Home() {
                   const isBorrowed = state.status === "borrowed" && state.currentLoan;
                   const borrower = getBorrower(state.currentLoan?.borrowerId);
                   const lastBorrower = getBorrower(state.lastReturn?.borrowerId);
+                  const days = loanDays(state.currentLoan?.borrowedAt, currentTime);
                   const imageSize =
                     phone.imageSize ??
                     ({ width: 360, height: 360, displayHeight: 176 } as {
@@ -475,8 +495,8 @@ export default function Home() {
                       className={cn(
                         "group flex h-full flex-col rounded-xl border-2 p-3 text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         isBorrowed
-                          ? "border-red-300 bg-red-50 hover:border-red-400"
-                          : "border-emerald-300 bg-emerald-50 hover:border-emerald-400"
+                          ? cn(loanTone(days), "hover:border-red-400")
+                          : "border-emerald-500/50 bg-emerald-500/10 hover:border-emerald-400"
                       )}
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -492,11 +512,11 @@ export default function Home() {
                           className={cn(
                             "inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold",
                             isBorrowed
-                              ? "border-red-300 bg-red-100 text-red-700"
-                              : "border-emerald-300 bg-emerald-100 text-emerald-700"
+                              ? "border-red-400/60 bg-red-950/60 text-red-200"
+                              : "border-emerald-500/50 bg-emerald-500/15 text-emerald-300"
                           )}
                         >
-                          {isBorrowed ? "대여 중" : "대여 가능"}
+                          {isBorrowed ? loanLabel(days) : "대여 가능"}
                         </span>
                       </div>
 
@@ -528,7 +548,7 @@ export default function Home() {
                             </>
                           ) : (
                             <>
-                              <div className="rounded-lg bg-muted/40 p-2">
+                              <div className="rounded-lg bg-black/20 p-2">
                                 <p className="text-[11px] text-muted-foreground">
                                   마지막 반납
                                 </p>
@@ -615,7 +635,17 @@ export default function Home() {
           )}
 
           <div className="space-y-3">
-            <Label>대여자 선택</Label>
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="borrower-search">대여자 선택</Label>
+              <Input
+                id="borrower-search"
+                type="search"
+                value={borrowerQuery}
+                onChange={(event) => setBorrowerQuery(event.target.value)}
+                placeholder="이름 또는 팀 검색"
+                className="h-8 max-w-[12rem] text-sm"
+              />
+            </div>
             <div className="max-h-[50dvh] overflow-y-auto rounded-xl border p-2 sm:max-h-[480px] sm:p-4">
               {borrowers.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
@@ -623,7 +653,12 @@ export default function Home() {
                 </p>
               ) : (
                 <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-                  {borrowers.map((borrower) => (
+                  {visibleBorrowers.length === 0 && (
+                    <p className="col-span-full text-sm text-muted-foreground">
+                      검색 결과가 없습니다.
+                    </p>
+                  )}
+                  {visibleBorrowers.map((borrower) => (
                     <button
                       key={borrower.id}
                       type="button"
@@ -834,13 +869,37 @@ export default function Home() {
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>응원 문구 추가</DialogTitle>
+            <DialogTitle>롤링 배너 관리</DialogTitle>
             <DialogDescription>
-              롤링 배너에 표시할 문구를 입력해 주세요.
+              최대 5개까지 표시되고, 새 문구를 추가하면 가장 오래된 문구가 내려갑니다.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3">
+          <div className="space-y-4">
+            <ul className="space-y-1.5">
+              {bannerMessages.length === 0 && (
+                <li className="text-sm text-muted-foreground">
+                  등록된 문구가 없습니다.
+                </li>
+              )}
+              {bannerMessages.map((message) => (
+                <li
+                  key={message}
+                  className="flex items-center justify-between gap-2 rounded-md border px-3 py-1.5 text-sm"
+                >
+                  <span className="min-w-0 truncate">{message}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 shrink-0 px-2 text-xs text-muted-foreground hover:text-destructive"
+                    onClick={() => runAction(() => api.deleteBanner(message))}
+                    disabled={offline || busy}
+                  >
+                    삭제
+                  </Button>
+                </li>
+              ))}
+            </ul>
             <div className="grid gap-2">
               <Label htmlFor="banner-message">응원 문구</Label>
               <Input

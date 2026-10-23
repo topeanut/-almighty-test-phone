@@ -5,7 +5,7 @@ export const PHONES = [
     platform: "android",
     model: "갤럭시 S8",
     color: "미드나이트 블랙",
-    image: "/devices/a01-s8.avif",
+    image: "/devices/cutout/a01-s8.png",
     imageSize: { width: 360, height: 360, displayHeight: 176 },
   },
   {
@@ -14,7 +14,7 @@ export const PHONES = [
     platform: "android",
     model: "갤럭시 S9",
     color: "선라이즈 골드",
-    image: "/devices/a02-s9.jpg",
+    image: "/devices/cutout/a02-s9.png",
     imageSize: { width: 849, height: 560, displayHeight: 150 },
   },
   {
@@ -23,7 +23,7 @@ export const PHONES = [
     platform: "android",
     model: "갤럭시 S10 5G",
     color: "크라운 골드",
-    image: "/devices/a3-s10.jpeg",
+    image: "/devices/cutout/a3-s10.png",
     imageSize: { width: 275, height: 183, displayHeight: 140 },
   },
   {
@@ -32,7 +32,7 @@ export const PHONES = [
     platform: "android",
     model: "LG V50 ThinQ",
     color: "아스트로 블랙",
-    image: "/devices/a04-v50.webp",
+    image: "/devices/cutout/a04-v50.png",
     imageSize: { width: 593, height: 589, displayHeight: 176 },
   },
   {
@@ -41,7 +41,7 @@ export const PHONES = [
     platform: "android",
     model: "갤럭시 S23",
     color: "크림",
-    image: "/devices/a05-s23.png",
+    image: "/devices/cutout/a05-s23.png",
     imageSize: { width: 360, height: 360, displayHeight: 176 },
   },
   {
@@ -50,7 +50,7 @@ export const PHONES = [
     platform: "ios",
     model: "아이폰 SE",
     color: "PRODUCT(RED)",
-    image: "/devices/i01_se1.jpeg",
+    image: "/devices/cutout/i01_se1.png",
     imageSize: { width: 400, height: 400, displayHeight: 176 },
   },
   {
@@ -59,7 +59,7 @@ export const PHONES = [
     platform: "ios",
     model: "아이폰 X",
     color: "스페이스 그레이",
-    image: "/devices/i02-X.webp",
+    image: "/devices/cutout/i02-X.png",
     imageSize: { width: 360, height: 360, displayHeight: 176 },
   },
   {
@@ -68,7 +68,7 @@ export const PHONES = [
     platform: "ios",
     model: "아이폰 12 mini",
     color: "블랙",
-    image: "/devices/i03-12mini.avif",
+    image: "/devices/cutout/i03-12mini.png",
     imageSize: { width: 600, height: 600, displayHeight: 176 },
   },
 ] as const;

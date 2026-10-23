@@ -10,7 +10,7 @@ import { POST as transfer } from "@/app/api/phones/[id]/transfer/route";
 import { POST as returnPhone } from "@/app/api/phones/[id]/return/route";
 import { POST as addBorrower } from "@/app/api/borrowers/route";
 import { DELETE as deleteBorrower } from "@/app/api/borrowers/[id]/route";
-import { POST as addBanner } from "@/app/api/banner/route";
+import { POST as addBanner, DELETE as deleteBanner } from "@/app/api/banner/route";
 
 let dir: string;
 
@@ -116,6 +116,13 @@ describe("API 라우트", () => {
     expect((await res.json()).bannerMessages).toContain("hi");
     res = await addBanner(json({ message: " " }));
     await expectError(res, 400);
+  });
+
+  it("배너 삭제와 없는 배너 404", async () => {
+    await addBanner(json({ message: "bye" }));
+    const res = await deleteBanner(json({ message: "bye" }));
+    expect((await res.json()).bannerMessages).not.toContain("bye");
+    await expectError(await deleteBanner(json({ message: "bye" })), 404);
   });
 
   it("중복 배너는 200이며 중복 추가되지 않는다", async () => {

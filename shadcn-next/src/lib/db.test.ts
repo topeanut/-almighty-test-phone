@@ -38,6 +38,28 @@ describe("Store 읽기", () => {
   });
 });
 
+describe("배너 삭제", () => {
+  it("지정한 배너만 지운다", () => {
+    store.addBanner("지울 문구");
+    const state = store.deleteBanner("지울 문구");
+    expect(state.bannerMessages).toEqual(DEFAULT_BANNER_MESSAGES);
+  });
+
+  it("없는 배너를 지우면 404", () => {
+    expect(() => store.deleteBanner("없는 문구")).toThrow(StoreError);
+  });
+
+  it("모두 지운 뒤 다시 열어도 기본 문구가 되살아나지 않는다", () => {
+    const file = path.join(dir, "empty.sqlite");
+    const a = new Store(file);
+    for (const m of DEFAULT_BANNER_MESSAGES) a.deleteBanner(m);
+    a.close();
+    const b = new Store(file);
+    expect(b.getState().bannerMessages).toEqual([]);
+    b.close();
+  });
+});
+
 const addUser = (name = "홍길동", org = "QA") => {
   const state = store.addBorrower(name, org);
   return state.borrowers[state.borrowers.length - 1].id;

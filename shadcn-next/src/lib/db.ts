@@ -86,11 +86,14 @@ export class Store {
 
   constructor(filePath: string) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    // 기본 배너는 DB 파일을 처음 만들 때만 넣는다. 사용자가 배너를 모두 지운 뒤
+    // 재시작해도 기본 문구가 되살아나지 않게 하기 위해서다.
+    const isNewFile = !fs.existsSync(filePath);
     this.db = new Database(filePath);
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("busy_timeout = 3000");
     this.db.exec(SCHEMA);
-    this.seed();
+    if (isNewFile) this.seed();
   }
 
   private seed() {
@@ -252,6 +255,14 @@ export class Store {
         .run(MAX_BANNERS);
       return this.getState();
     })();
+  }
+
+  deleteBanner(message: string): AppState {
+    const result = this.db
+      .prepare("DELETE FROM banner_messages WHERE message = ?")
+      .run(message);
+    if (result.changes === 0) throw new StoreError(404, "이미 삭제된 배너입니다.");
+    return this.getState();
   }
 
   close() {

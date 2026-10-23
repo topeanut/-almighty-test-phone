@@ -53,4 +53,6 @@ export const api = {
   deleteBorrower: (id: string) =>
     request(`/api/borrowers/${encodeURIComponent(id)}`, { method: "DELETE" }),
   addBanner: (message: string) => post("/api/banner", { message }),
+  deleteBanner: (message: string) =>
+    request("/api/banner", { method: "DELETE", body: JSON.stringify({ message }) }),
 };

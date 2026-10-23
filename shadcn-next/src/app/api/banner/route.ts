@@ -9,3 +9,10 @@ export async function POST(req: Request) {
     return getStore().addBanner(String(body.message ?? ""));
   });
 }
+
+export async function DELETE(req: Request) {
+  return handle(async () => {
+    const body = await readJson<{ message: string }>(req);
+    return getStore().deleteBanner(String(body.message ?? ""));
+  });
+}
