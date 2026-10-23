@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PHONES, PHONE_BY_ID, type PhoneId, type Platform } from "@/lib/phones";
+import { PHONES, type PhoneId, type Platform } from "@/lib/phones";
 import { api, ApiError, isOfflineError } from "@/lib/api";
 import type {
   AppState,
@@ -39,19 +39,10 @@ import {
   resolveSelectedBorrowerId,
 } from "@/lib/dialog-selection";
 
-type GridItem = { type: "phone"; phoneId: PhoneId } | { type: "borrower-card" };
-
-const GRID_LAYOUT: GridItem[] = [
-  { type: "phone", phoneId: "a01" },
-  { type: "phone", phoneId: "i01" },
-  { type: "phone", phoneId: "a02" },
-  { type: "phone", phoneId: "i02" },
-  { type: "phone", phoneId: "a03" },
-  { type: "phone", phoneId: "i03" },
-  { type: "phone", phoneId: "a04" },
-  { type: "borrower-card" },
-  { type: "phone", phoneId: "a05" },
-];
+const PHONE_GROUPS = (["android", "ios"] as const).map((platform) => ({
+  platform,
+  phones: PHONES.filter((phone) => phone.platform === platform),
+}));
 
 type BorrowerOrgOption = "프론트엔드팀" | "백엔드팀" | "QA" | "기타";
 
@@ -413,15 +404,29 @@ export default function Home() {
             <p>오른쪽에 있는 종이는 쓰지 않으셔도 됩니다. 구시대의 유물입니다.</p>
           </div>
           <MotivationBanner messages={bannerMessages} />
-          <Button
-            variant="link"
-            size="sm"
-            className="justify-start px-0 text-xs text-muted-foreground underline-offset-4 hover:text-primary"
-            onClick={() => setBannerDialogOpen(true)}
-            disabled={offline}
-          >
-            롤링 배너 추가하기
-          </Button>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <Button
+              variant="link"
+              size="sm"
+              className="justify-start px-0 text-xs text-muted-foreground underline-offset-4 hover:text-primary"
+              onClick={() => setBannerDialogOpen(true)}
+              disabled={offline}
+            >
+              롤링 배너 추가하기
+            </Button>
+            <Button
+              variant="link"
+              size="sm"
+              className="justify-start px-0 text-xs text-muted-foreground underline-offset-4 hover:text-primary"
+              onClick={() => setBorrowerDialogOpen(true)}
+              disabled={offline}
+            >
+              대여자 등록하기
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              대여 규칙 · 반드시 대여 신청 후 가져가고, 반납할 땐 반납하기 버튼을 눌러주세요.
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {offline && (
@@ -435,164 +440,137 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3">
-        {GRID_LAYOUT.map((item) => {
-          if (item.type === "phone") {
-            const phone = PHONE_BY_ID[item.phoneId];
-            if (!phone) return null;
-            const state = ensurePhoneState(phones, phone.id);
-            const isBorrowed = state.status === "borrowed" && state.currentLoan;
-            const borrower = getBorrower(state.currentLoan?.borrowerId);
-            const lastBorrower = getBorrower(state.lastReturn?.borrowerId);
-            const imageSize =
-              phone.imageSize ??
-              ({ width: 360, height: 360, displayHeight: 176 } as {
-                width: number;
-                height: number;
-                displayHeight?: number;
-              });
-            const displayHeight =
-              imageSize.displayHeight !== undefined
-                ? imageSize.displayHeight
-                : 176;
+      <div className="flex flex-col gap-4">
+        {PHONE_GROUPS.map((group) => (
+          <section key={group.platform} className="space-y-2">
+            <h2 className="text-sm font-semibold text-muted-foreground">
+              {PLATFORM_LABELS[group.platform]} {group.phones.length}대
+            </h2>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+              {group.phones.map((phone) => {
+                  const state = ensurePhoneState(phones, phone.id);
+                  const isBorrowed = state.status === "borrowed" && state.currentLoan;
+                  const borrower = getBorrower(state.currentLoan?.borrowerId);
+                  const lastBorrower = getBorrower(state.lastReturn?.borrowerId);
+                  const imageSize =
+                    phone.imageSize ??
+                    ({ width: 360, height: 360, displayHeight: 176 } as {
+                      width: number;
+                      height: number;
+                      displayHeight?: number;
+                    });
+                  const displayHeight =
+                    imageSize.displayHeight !== undefined
+                      ? imageSize.displayHeight
+                      : 176;
 
-            return (
-              <button
-                key={phone.id}
-                type="button"
-                disabled={offline}
-                onClick={() =>
-                  openPhoneDialog(phone.id, isBorrowed ? "manage" : "borrow")
-                }
-                className={cn(
-                  "group flex h-full flex-col rounded-xl border-2 p-4 text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  isBorrowed
-                    ? "border-red-300 bg-red-50 hover:border-red-400"
-                    : "border-emerald-300 bg-emerald-50 hover:border-emerald-400"
-                )}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                      {PLATFORM_LABELS[phone.platform]}
-                    </p>
-                    <h2 className="text-xl font-semibold">{phone.label}</h2>
-                    <p className="text-xs text-muted-foreground">
-                      {phone.model} · {phone.color}
-                    </p>
-                  </div>
-                  <span
-                    className={cn(
-                      "inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold",
-                      isBorrowed
-                        ? "border-red-300 bg-red-100 text-red-700"
-                        : "border-emerald-300 bg-emerald-100 text-emerald-700"
-                    )}
-                  >
-                    {isBorrowed ? "대여 중" : "대여 가능"}
-                  </span>
-                </div>
-
-                <div className="mt-2 flex flex-1 items-center justify-between gap-2">
-                  <div className="min-w-0 flex-1 space-y-1.5 text-sm">
-                    {isBorrowed ? (
-                      <>
-                        <div>
-                          <p className="text-[11px] text-muted-foreground">
-                            대여자
-                          </p>
-                          <p className="text-sm font-semibold">
-                            {borrower ? borrower.name : "삭제된 대여자"}
-                          </p>
-                          {borrower && (
-                            <p className="text-[11px] text-muted-foreground">
-                              {borrower.organization}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-[11px] text-muted-foreground">
-                            대여 시작
-                          </p>
-                          <p className="whitespace-nowrap text-xs font-medium">
-                            {formatCardDateTime(state.currentLoan?.borrowedAt)}
-                          </p>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="rounded-lg bg-muted/40 p-2">
-                          <p className="text-[11px] text-muted-foreground">
-                            마지막 반납
-                          </p>
-                          <p className="whitespace-nowrap text-xs font-medium">
-                            {state.lastReturn
-                              ? formatCardDateTime(state.lastReturn.returnedAt)
-                              : "기록 없음"}
-                          </p>
-                          {state.lastReturn && (
-                            <p className="text-[11px] text-muted-foreground">
-                              {lastBorrower
-                                ? `${lastBorrower.name} · ${lastBorrower.organization}`
-                                : "삭제된 대여자"}
-                            </p>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="flex-shrink-0">
-                    <Image
-                      src={phone.image}
-                      alt={`${phone.model} ${phone.color}`}
-                      width={imageSize.width}
-                      height={imageSize.height}
-                      className="h-[calc(var(--phone-img-h)*0.6)] w-auto max-w-[35vw] object-contain md:max-w-[88px]"
-                      style={
-                        {
-                          "--phone-img-h": `${displayHeight}px`,
-                        } as React.CSSProperties
+                  return (
+                    <button
+                      key={phone.id}
+                      type="button"
+                      disabled={offline}
+                      onClick={() =>
+                        openPhoneDialog(phone.id, isBorrowed ? "manage" : "borrow")
                       }
-                    />
-                  </div>
-                </div>
-              </button>
-            );
-          }
+                      className={cn(
+                        "group flex h-full flex-col rounded-xl border-2 p-3 text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        isBorrowed
+                          ? "border-red-300 bg-red-50 hover:border-red-400"
+                          : "border-emerald-300 bg-emerald-50 hover:border-emerald-400"
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-lg font-semibold leading-tight">
+                            {phone.label}
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            {phone.model} · {phone.color}
+                          </p>
+                        </div>
+                        <span
+                          className={cn(
+                            "inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold",
+                            isBorrowed
+                              ? "border-red-300 bg-red-100 text-red-700"
+                              : "border-emerald-300 bg-emerald-100 text-emerald-700"
+                          )}
+                        >
+                          {isBorrowed ? "대여 중" : "대여 가능"}
+                        </span>
+                      </div>
 
-          return (
-            <div
-              key="borrower-card"
-              className="flex h-full flex-col justify-between gap-3 rounded-xl border p-4 shadow-sm"
-            >
-              <div className="space-y-1">
-                <h2 className="text-lg font-semibold">대여자 관리</h2>
-                <p className="text-sm text-muted-foreground">
-                  대여 가능 인원을 등록하고 관리하세요.
-                </p>
-              </div>
+                      <div className="mt-2 flex flex-1 items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1 space-y-1.5 text-sm">
+                          {isBorrowed ? (
+                            <>
+                              <div>
+                                <p className="text-[11px] text-muted-foreground">
+                                  대여자
+                                </p>
+                                <p className="text-sm font-semibold">
+                                  {borrower ? borrower.name : "삭제된 대여자"}
+                                </p>
+                                {borrower && (
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {borrower.organization}
+                                  </p>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-[11px] text-muted-foreground">
+                                  대여 시작
+                                </p>
+                                <p className="whitespace-nowrap text-xs font-medium">
+                                  {formatCardDateTime(state.currentLoan?.borrowedAt)}
+                                </p>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="rounded-lg bg-muted/40 p-2">
+                                <p className="text-[11px] text-muted-foreground">
+                                  마지막 반납
+                                </p>
+                                <p className="whitespace-nowrap text-xs font-medium">
+                                  {state.lastReturn
+                                    ? formatCardDateTime(state.lastReturn.returnedAt)
+                                    : "기록 없음"}
+                                </p>
+                                {state.lastReturn && (
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {lastBorrower
+                                      ? `${lastBorrower.name} · ${lastBorrower.organization}`
+                                      : "삭제된 대여자"}
+                                  </p>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
 
-              <div className="space-y-3">
-                <Button
-                  className="w-full"
-                  size="sm"
-                  onClick={() => setBorrowerDialogOpen(true)}
-                  disabled={offline}
-                >
-                  대여자 등록하기
-                </Button>
-
-                <div className="space-y-1 text-xs">
-                  <p className="font-semibold">대여 규칙</p>
-                  <p>· 반드시 대여를 신청하고 대여합니다.</p>
-                  <p>· 반납 시에는 직접 반납하기 버튼을 눌러 처리합니다.</p>
-                </div>
-              </div>
+                        <div className="flex-shrink-0">
+                          <Image
+                            src={phone.image}
+                            alt={`${phone.model} ${phone.color}`}
+                            width={imageSize.width}
+                            height={imageSize.height}
+                            className="h-[calc(var(--phone-img-h)*0.5)] w-auto max-w-[30vw] object-contain md:max-w-[76px]"
+                            style={
+                              {
+                                "--phone-img-h": `${displayHeight}px`,
+                              } as React.CSSProperties
+                            }
+                          />
+                        </div>
+                      </div>
+                    </button>
+                  );
+              })}
             </div>
-          );
-        })}
-      </section>
+          </section>
+        ))}
+      </div>
 
       <Dialog
         open={phoneDialogOpen}
