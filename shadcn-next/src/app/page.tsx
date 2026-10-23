@@ -80,6 +80,17 @@ const formatDateTime = (value?: string) => {
   });
 };
 
+const formatCardDateTime = (value?: string) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  const time = date.toLocaleTimeString("ko-KR", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `${date.getMonth() + 1}/${date.getDate()} ${time}`;
+};
+
 const formatClock = (date: Date) =>
   date.toLocaleString("ko-KR", {
     year: "numeric",
@@ -424,7 +435,7 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:grid-rows-5 sm:gap-6">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3">
         {GRID_LAYOUT.map((item) => {
           if (item.type === "phone") {
             const phone = PHONE_BY_ID[item.phoneId];
@@ -454,28 +465,36 @@ export default function Home() {
                   openPhoneDialog(phone.id, isBorrowed ? "manage" : "borrow")
                 }
                 className={cn(
-                  "group flex h-full flex-col rounded-xl border-2 p-4 text-left sm:p-5 shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "group flex h-full flex-col rounded-xl border-2 p-4 text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   isBorrowed
                     ? "border-red-300 bg-red-50 hover:border-red-400"
                     : "border-emerald-300 bg-emerald-50 hover:border-emerald-400"
                 )}
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                       {PLATFORM_LABELS[phone.platform]}
                     </p>
-                    <h2 className="mt-1 text-2xl font-semibold">
-                      {phone.label}
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
+                    <h2 className="text-xl font-semibold">{phone.label}</h2>
+                    <p className="text-xs text-muted-foreground">
                       {phone.model} · {phone.color}
                     </p>
                   </div>
+                  <span
+                    className={cn(
+                      "inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold",
+                      isBorrowed
+                        ? "border-red-300 bg-red-100 text-red-700"
+                        : "border-emerald-300 bg-emerald-100 text-emerald-700"
+                    )}
+                  >
+                    {isBorrowed ? "대여 중" : "대여 가능"}
+                  </span>
                 </div>
 
-                <div className="mt-4 flex flex-1 items-center justify-between">
-                  <div className="flex-1 space-y-2.5 text-sm">
+                <div className="mt-2 flex flex-1 items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1 space-y-1.5 text-sm">
                     {isBorrowed ? (
                       <>
                         <div>
@@ -483,30 +502,32 @@ export default function Home() {
                             대여자
                           </p>
                           <p className="text-sm font-semibold">
-                            {borrower
-                              ? `${borrower.name} · ${borrower.organization}`
-                              : "삭제된 대여자"}
+                            {borrower ? borrower.name : "삭제된 대여자"}
                           </p>
+                          {borrower && (
+                            <p className="text-[11px] text-muted-foreground">
+                              {borrower.organization}
+                            </p>
+                          )}
                         </div>
                         <div>
                           <p className="text-[11px] text-muted-foreground">
                             대여 시작
                           </p>
-                          <p>{formatDateTime(state.currentLoan?.borrowedAt)}</p>
+                          <p className="whitespace-nowrap text-xs font-medium">
+                            {formatCardDateTime(state.currentLoan?.borrowedAt)}
+                          </p>
                         </div>
                       </>
                     ) : (
                       <>
-                        <p className="text-sm font-semibold text-primary">
-                          탭하여 대여자를 선택하세요
-                        </p>
-                        <div className="rounded-lg bg-muted/40 p-2.5">
+                        <div className="rounded-lg bg-muted/40 p-2">
                           <p className="text-[11px] text-muted-foreground">
                             마지막 반납
                           </p>
-                          <p className="text-xs font-medium sm:text-sm">
+                          <p className="whitespace-nowrap text-xs font-medium">
                             {state.lastReturn
-                              ? formatDateTime(state.lastReturn.returnedAt)
+                              ? formatCardDateTime(state.lastReturn.returnedAt)
                               : "기록 없음"}
                           </p>
                           {state.lastReturn && (
@@ -527,7 +548,7 @@ export default function Home() {
                       alt={`${phone.model} ${phone.color}`}
                       width={imageSize.width}
                       height={imageSize.height}
-                      className="h-[calc(var(--phone-img-h)*0.7)] w-auto max-w-[40vw] object-contain sm:h-[var(--phone-img-h)] sm:max-w-none"
+                      className="h-[calc(var(--phone-img-h)*0.6)] w-auto max-w-[35vw] object-contain md:max-w-[88px]"
                       style={
                         {
                           "--phone-img-h": `${displayHeight}px`,
@@ -536,25 +557,6 @@ export default function Home() {
                     />
                   </div>
                 </div>
-
-                <div className="mt-3 text-right">
-                  <span
-                    className={cn(
-                      "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold",
-                      isBorrowed
-                        ? "border-red-300 bg-red-100 text-red-700"
-                        : "border-emerald-300 bg-emerald-100 text-emerald-700"
-                    )}
-                  >
-                    {isBorrowed ? "대여 중" : "대여 가능"}
-                  </span>
-                </div>
-
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  {isBorrowed
-                    ? "누르면 반납하거나 대여자를 변경할 수 있어요."
-                    : "누르면 대여자를 선택해 대여할 수 있어요."}
-                </p>
               </button>
             );
           }
@@ -562,16 +564,16 @@ export default function Home() {
           return (
             <div
               key="borrower-card"
-              className="flex h-full flex-col justify-between rounded-xl border p-5 shadow-sm"
+              className="flex h-full flex-col justify-between gap-3 rounded-xl border p-4 shadow-sm"
             >
-              <div className="space-y-3">
+              <div className="space-y-1">
                 <h2 className="text-lg font-semibold">대여자 관리</h2>
                 <p className="text-sm text-muted-foreground">
                   대여 가능 인원을 등록하고 관리하세요.
                 </p>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <Button
                   className="w-full"
                   size="sm"
@@ -581,7 +583,7 @@ export default function Home() {
                   대여자 등록하기
                 </Button>
 
-                <div className="space-y-1.5 text-xs sm:text-sm">
+                <div className="space-y-1 text-xs">
                   <p className="font-semibold">대여 규칙</p>
                   <p>· 반드시 대여를 신청하고 대여합니다.</p>
                   <p>· 반납 시에는 직접 반납하기 버튼을 눌러 처리합니다.</p>
