@@ -20,8 +20,17 @@ const borrowedBy = (borrowerId: string): PhoneState => ({
 });
 
 describe("defaultBorrowerId", () => {
-  it("borrow mode picks the first borrower", () => {
-    expect(defaultBorrowerId("borrow", available, [b("a"), b("b")])).toBe("a");
+  it("borrow mode starts with nobody selected", () => {
+    expect(defaultBorrowerId("borrow", available, [b("a"), b("b")])).toBeNull();
+  });
+  it("borrow mode starts with the remembered borrower", () => {
+    expect(defaultBorrowerId("borrow", available, [b("a"), b("b")], "b")).toBe("b");
+  });
+  it("borrow mode ignores a remembered borrower that was deleted", () => {
+    expect(defaultBorrowerId("borrow", available, [b("a")], "gone")).toBeNull();
+  });
+  it("manage mode ignores the remembered borrower", () => {
+    expect(defaultBorrowerId("manage", borrowedBy("a"), [b("a"), b("b")], "b")).toBe("a");
   });
   it("borrow mode with no borrowers is null", () => {
     expect(defaultBorrowerId("borrow", available, [])).toBeNull();
@@ -56,10 +65,10 @@ describe("resolveSelectedBorrowerId", () => {
     ).toBe("b");
   });
 
-  it("falls back to the first borrower in borrow mode when the selection was deleted", () => {
+  it("clears the selection in borrow mode when the selected borrower was deleted", () => {
     expect(
       resolveSelectedBorrowerId("c", "borrow", available, [b("a"), b("b")])
-    ).toBe("a");
+    ).toBeNull();
     expect(resolveSelectedBorrowerId("c", "borrow", available, [])).toBeNull();
   });
 
@@ -73,6 +82,7 @@ describe("resolveSelectedBorrowerId", () => {
   });
 
   it("uses the default when nothing is selected yet", () => {
-    expect(resolveSelectedBorrowerId(null, "borrow", available, [b("a")])).toBe("a");
+    expect(resolveSelectedBorrowerId(null, "borrow", available, [b("a")])).toBeNull();
+    expect(resolveSelectedBorrowerId(null, "borrow", available, [b("a")], "a")).toBe("a");
   });
 });
