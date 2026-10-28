@@ -1,9 +1,12 @@
 "use client";
 
 import * as React from "react";
-import Image from "next/image";
+import { Check, Lock, Search } from "lucide-react";
 
+import { LoanRow } from "@/components/loan-row";
 import { MotivationBanner } from "@/components/motivation-banner";
+import { DeviceImage, DeviceSpec, PhoneTile } from "@/components/phone-tile";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -25,33 +28,19 @@ import {
 } from "@/components/ui/select";
 import { PHONES, PHONE_BY_ID, type PhoneId, type Platform } from "@/lib/phones";
 import { api, ApiError, isOfflineError } from "@/lib/api";
-import type {
-  AppState,
-  Borrower,
-  PhoneStateMap,
-} from "@/lib/types";
+import { readMeId, writeMeId } from "@/lib/me";
+import type { AppState, Borrower, PhoneStateMap } from "@/lib/types";
 import {
+  LONG_LOAN_DAYS,
   createDefaultPhoneStates,
   ensurePhoneState,
+  loanDays,
+  recentBorrowerIds,
 } from "@/lib/phone-state";
 import {
   defaultBorrowerId,
   resolveSelectedBorrowerId,
 } from "@/lib/dialog-selection";
-
-type GridItem = { type: "phone"; phoneId: PhoneId } | { type: "borrower-card" };
-
-const GRID_LAYOUT: GridItem[] = [
-  { type: "phone", phoneId: "a01" },
-  { type: "phone", phoneId: "i01" },
-  { type: "phone", phoneId: "a02" },
-  { type: "phone", phoneId: "i02" },
-  { type: "phone", phoneId: "a03" },
-  { type: "phone", phoneId: "i03" },
-  { type: "phone", phoneId: "a04" },
-  { type: "borrower-card" },
-  { type: "phone", phoneId: "a05" },
-];
 
 type BorrowerOrgOption = "프론트엔드팀" | "백엔드팀" | "QA" | "기타";
 
@@ -62,10 +51,22 @@ const BORROWER_ORG_OPTIONS: BorrowerOrgOption[] = [
   "기타",
 ];
 
-const PLATFORM_LABELS: Record<Platform, string> = {
-  android: "안드로이드",
-  ios: "아이폰",
-};
+type PlatformFilter = "all" | Platform;
+
+const PLATFORM_FILTERS: { value: PlatformFilter; label: string }[] = [
+  { value: "all", label: "전체" },
+  { value: "android", label: "안드로이드" },
+  { value: "ios", label: "아이폰" },
+];
+
+const UNLOCK_CODES = [
+  { label: "4자리", value: "0727" },
+  { label: "6자리", value: "000000" },
+  { label: "패턴", value: "2489" },
+];
+
+const osVersionNumber = (version: string | null) =>
+  version ? parseFloat(version.replace(/[^\d.]/g, "")) || 0 : 0;
 
 const formatDateTime = (value?: string) => {
   if (!value) return "-";
@@ -80,14 +81,16 @@ const formatDateTime = (value?: string) => {
   });
 };
 
-const formatClock = (date: Date) =>
-  date.toLocaleString("ko-KR", {
-    year: "numeric",
+const formatShortDateTime = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("ko-KR", {
     month: "numeric",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
   });
+};
 
 export default function Home() {
   const [borrowers, setBorrowers] = React.useState<Borrower[]>([]);
@@ -96,6 +99,8 @@ export default function Home() {
   );
   const [hydrated, setHydrated] = React.useState(false);
   const [currentTime, setCurrentTime] = React.useState(() => new Date());
+  const [platformFilter, setPlatformFilter] =
+    React.useState<PlatformFilter>("all");
 
   const [phoneDialogOpen, setPhoneDialogOpen] = React.useState(false);
   const [phoneDialogMode, setPhoneDialogMode] = React.useState<
@@ -107,6 +112,9 @@ export default function Home() {
   const [selectedBorrowerId, setSelectedBorrowerId] = React.useState<
     string | null
   >(null);
+  const [borrowerQuery, setBorrowerQuery] = React.useState("");
+  const [meId, setMeId] = React.useState<string | null>(null);
+  const [rememberChoice, setRememberChoice] = React.useState(false);
 
   const [borrowerDialogOpen, setBorrowerDialogOpen] = React.useState(false);
   const [borrowerName, setBorrowerName] = React.useState("");
@@ -124,6 +132,8 @@ export default function Home() {
   const [busy, setBusy] = React.useState(false);
   const [toast, setToast] = React.useState<string | null>(null);
   const toastTimer = React.useRef<number | null>(null);
+  const [flashPhoneId, setFlashPhoneId] = React.useState<PhoneId | null>(null);
+  const flashTimer = React.useRef<number | null>(null);
 
   const seqRef = React.useRef(0);
   const latestAppliedSeqRef = React.useRef(0);
@@ -142,6 +152,16 @@ export default function Home() {
       setToast(null);
       toastTimer.current = null;
     }, 3000);
+  }, []);
+
+  // Briefly outlines the phone that just moved between sections.
+  const flashPhone = React.useCallback((phoneId: PhoneId) => {
+    if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
+    setFlashPhoneId(phoneId);
+    flashTimer.current = window.setTimeout(() => {
+      setFlashPhoneId(null);
+      flashTimer.current = null;
+    }, 1400);
   }, []);
 
   // Apply a response only if it is newer than the last applied one, so a GET
@@ -167,12 +187,14 @@ export default function Home() {
   const runAction = React.useCallback(
     async (
       action: () => Promise<AppState>,
-      onClientError?: (message: string) => void
+      onClientError?: (message: string) => void,
+      onSuccess?: () => void
     ) => {
       setBusy(true);
       const seq = ++seqRef.current;
       try {
         applyIfNewer(seq, await action());
+        onSuccess?.();
         return true;
       } catch (error) {
         if (isOfflineError(error)) {
@@ -198,22 +220,30 @@ export default function Home() {
   React.useEffect(
     () => () => {
       if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
+      if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
     },
     []
   );
-
 
   const openPhoneDialog = React.useCallback(
     (phoneId: PhoneId, mode: "borrow" | "manage") => {
       setSelectedPhoneId(phoneId);
       setPhoneDialogMode(mode);
+      setBorrowerQuery("");
+      setRememberChoice(false);
+      setReturnConfirmPhoneId(null);
       // Default selection is computed once on open; polling must not reset it.
       setSelectedBorrowerId(
-        defaultBorrowerId(mode, ensurePhoneState(phones, phoneId), borrowers)
+        defaultBorrowerId(
+          mode,
+          ensurePhoneState(phones, phoneId),
+          borrowers,
+          meId
+        )
       );
       setPhoneDialogOpen(true);
     },
-    [borrowers, phones]
+    [borrowers, phones, meId]
   );
 
   const closePhoneDialog = React.useCallback(() => {
@@ -221,6 +251,10 @@ export default function Home() {
     setPhoneDialogMode(null);
     setSelectedPhoneId(null);
     setSelectedBorrowerId(null);
+  }, []);
+
+  React.useEffect(() => {
+    setMeId(readMeId());
   }, []);
 
   React.useEffect(() => {
@@ -279,7 +313,8 @@ export default function Home() {
           selectedBorrowerId,
           phoneDialogMode,
           ensurePhoneState(phones, selectedPhoneId),
-          borrowers
+          borrowers,
+          meId
         )
       : null;
 
@@ -287,18 +322,43 @@ export default function Home() {
     if (!selectedPhoneId || !effectiveSelectedBorrowerId) return;
     const phoneId = selectedPhoneId;
     const borrowerId = effectiveSelectedBorrowerId;
+    const borrower = borrowers.find((b) => b.id === borrowerId);
+    if (rememberChoice) {
+      writeMeId(borrowerId);
+      setMeId(borrowerId);
+    }
     closePhoneDialog();
-    await runAction(() => api.borrow(phoneId, borrowerId));
+    await runAction(
+      () => api.borrow(phoneId, borrowerId),
+      undefined,
+      () => {
+        showToast(
+          `${PHONE_BY_ID[phoneId].model} · ${borrower?.name ?? ""} 님 대여`
+        );
+        flashPhone(phoneId);
+      }
+    );
   };
 
   const handleTransferLoan = async () => {
     if (!selectedPhoneId || !effectiveSelectedBorrowerId) return;
     const phoneId = selectedPhoneId;
     const borrowerId = effectiveSelectedBorrowerId;
+    const borrower = borrowers.find((b) => b.id === borrowerId);
     closePhoneDialog();
-    await runAction(() => api.transfer(phoneId, borrowerId));
+    await runAction(
+      () => api.transfer(phoneId, borrowerId),
+      undefined,
+      () => {
+        showToast(
+          `${PHONE_BY_ID[phoneId].model} 대여자를 ${borrower?.name ?? ""} 님으로 변경`
+        );
+        flashPhone(phoneId);
+      }
+    );
   };
 
+  // Return from the manage dialog asks the same charger question inline.
   const handleManualReturn = () => {
     if (!selectedPhoneId) return;
     const targetPhoneId = selectedPhoneId;
@@ -306,11 +366,25 @@ export default function Home() {
     setReturnConfirmPhoneId(targetPhoneId);
   };
 
-  const finalizeReturn = async () => {
-    if (!returnConfirmPhoneId) return;
-    const phoneId = returnConfirmPhoneId;
+  const finalizeReturn = async (phoneId: PhoneId) => {
     setReturnConfirmPhoneId(null);
-    await runAction(() => api.returnPhone(phoneId));
+    await runAction(
+      () => api.returnPhone(phoneId),
+      undefined,
+      () => {
+        showToast(`${PHONE_BY_ID[phoneId].model} 반납 완료`);
+        flashPhone(phoneId);
+      }
+    );
+  };
+
+  const handleCopyCode = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      showToast(`${value} 복사됨`);
+    } catch {
+      showToast(`비밀번호 ${value}`);
+    }
   };
 
   const handleAddBannerMessage = async () => {
@@ -381,6 +455,81 @@ export default function Home() {
   const currentDialogPhone = selectedPhoneId
     ? ensurePhoneState(phones, selectedPhoneId)
     : null;
+  const dialogPhone = selectedPhoneId ? PHONE_BY_ID[selectedPhoneId] : null;
+  const selectedBorrower = getBorrower(effectiveSelectedBorrowerId);
+  // A remembered borrower that was deleted simply stops counting as "me".
+  const me = getBorrower(meId);
+
+  const forgetMe = () => {
+    writeMeId(null);
+    setMeId(null);
+    showToast("이 브라우저의 기본 대여자를 해제했습니다.");
+  };
+
+  const visiblePhones = PHONES.filter(
+    (phone) => platformFilter === "all" || phone.platform === platformFilter
+  );
+  const availablePhones = visiblePhones
+    .filter((phone) => ensurePhoneState(phones, phone.id).status !== "borrowed")
+    .sort(
+      (a, b) =>
+        a.platform.localeCompare(b.platform) ||
+        osVersionNumber(a.osVersion) - osVersionNumber(b.osVersion)
+    );
+  const loanedPhones = visiblePhones
+    .filter((phone) => {
+      const state = ensurePhoneState(phones, phone.id);
+      return state.status === "borrowed" && state.currentLoan;
+    })
+    .sort((a, b) =>
+      (ensurePhoneState(phones, a.id).currentLoan?.borrowedAt ?? "").localeCompare(
+        ensurePhoneState(phones, b.id).currentLoan?.borrowedAt ?? ""
+      )
+    );
+
+  const query = borrowerQuery.trim();
+  const matchesQuery = (borrower: Borrower) =>
+    !query ||
+    borrower.name.includes(query) ||
+    borrower.organization.includes(query);
+  const recentIds = recentBorrowerIds(
+    phones,
+    borrowers.map((b) => b.id)
+  );
+  const recentBorrowers = recentIds
+    .map((id) => getBorrower(id))
+    .filter((b): b is Borrower => !!b && matchesQuery(b));
+  const filteredBorrowers = borrowers.filter(matchesQuery);
+
+  const renderBorrowerOption = (borrower: Borrower) => {
+    const selected = effectiveSelectedBorrowerId === borrower.id;
+    return (
+      <button
+        key={borrower.id}
+        type="button"
+        aria-pressed={selected}
+        onClick={() => setSelectedBorrowerId(borrower.id)}
+        className={cn(
+          "flex min-h-12 items-center justify-between gap-2 rounded-lg border p-2.5 text-left transition",
+          selected
+            ? "border-2 border-foreground bg-foreground/5 p-[9px]"
+            : "hover:border-foreground/40"
+        )}
+      >
+        <span>
+          <span className="block text-[11px] text-muted-foreground">
+            {borrower.organization}
+          </span>
+          <span className="text-sm font-semibold">{borrower.name}</span>
+        </span>
+        {selected && (
+          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-background">
+            <Check className="size-3" aria-hidden />
+          </span>
+        )}
+      </button>
+    );
+  };
 
   if (!hydrated) {
     return (
@@ -391,289 +540,316 @@ export default function Home() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-8">
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-xl font-semibold tracking-tight sm:text-3xl">
-            전능아이티 테스트폰 이력관리
-          </h1>
-          <div className="w-full max-w-full rounded-md bg-amber-500/15 px-3 py-1 text-sm font-semibold text-amber-800 sm:w-[36rem] sm:py-1.5 dark:text-amber-300">
-            <p>테스트폰 비밀번호 · 네자리 0727 · 여섯자리 000000 · 패턴 2489</p>
-            <p>오른쪽에 있는 종이는 쓰지 않으셔도 됩니다. 구시대의 유물입니다.</p>
+    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:py-8">
+      <header className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
+              전능아이티 테스트폰 대여
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              카드를 눌러 빌리고, 반납할 때는 충전기를 꽂아 주세요.
+            </p>
           </div>
-          <MotivationBanner messages={bannerMessages} />
+          <div className="flex flex-wrap items-center gap-2">
+            {me && (
+              <button
+                type="button"
+                onClick={forgetMe}
+                className="inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs transition hover:bg-accent"
+                aria-label={`기본 대여자 ${me.name} 해제`}
+              >
+                <span className="font-semibold">나: {me.name}</span>
+                <span className="text-muted-foreground">해제</span>
+              </button>
+            )}
+            {offline && (
+              <span className="rounded-full bg-destructive px-3 py-1 text-xs font-semibold text-destructive-foreground">
+                서버 연결 끊김
+              </span>
+            )}
+            <div
+              className="flex flex-wrap gap-1.5"
+              aria-label="테스트폰 잠금 해제 번호, 누르면 복사"
+            >
+              {UNLOCK_CODES.map((code, index) => (
+                <button
+                  key={code.label}
+                  type="button"
+                  onClick={() => handleCopyCode(code.value)}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border bg-muted px-2.5 text-xs text-muted-foreground transition hover:bg-accent"
+                >
+                  {index === 0 && <Lock className="size-3" aria-hidden />}
+                  {code.label}
+                  <span className="font-mono font-semibold text-foreground">
+                    {code.value}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <ThemeToggle />
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <MotivationBanner messages={bannerMessages} className="sm:w-[28rem]" />
           <Button
             variant="link"
             size="sm"
-            className="justify-start px-0 text-xs text-muted-foreground underline-offset-4 hover:text-primary"
+            className="px-0 text-xs text-muted-foreground underline-offset-4 hover:text-primary"
             onClick={() => setBannerDialogOpen(true)}
             disabled={offline}
           >
             롤링 배너 추가하기
           </Button>
         </div>
-        <div className="flex items-center gap-3">
-          {offline && (
-            <span className="rounded-full bg-destructive px-3 py-1 text-xs font-semibold text-destructive-foreground">
-              서버 연결 끊김
-            </span>
-          )}
-          <span className="text-sm text-muted-foreground">
-            현재 시각 {formatClock(currentTime)}
-          </span>
-        </div>
       </header>
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:grid-rows-5 sm:gap-6">
-        {GRID_LAYOUT.map((item) => {
-          if (item.type === "phone") {
-            const phone = PHONE_BY_ID[item.phoneId];
-            if (!phone) return null;
-            const state = ensurePhoneState(phones, phone.id);
-            const isBorrowed = state.status === "borrowed" && state.currentLoan;
-            const borrower = getBorrower(state.currentLoan?.borrowerId);
-            const lastBorrower = getBorrower(state.lastReturn?.borrowerId);
-            const imageSize =
-              phone.imageSize ??
-              ({ width: 360, height: 360, displayHeight: 176 } as {
-                width: number;
-                height: number;
-                displayHeight?: number;
-              });
-            const displayHeight =
-              imageSize.displayHeight !== undefined
-                ? imageSize.displayHeight
-                : 176;
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="기기 필터">
+        {PLATFORM_FILTERS.map((filter) => (
+          <button
+            key={filter.value}
+            type="button"
+            aria-pressed={platformFilter === filter.value}
+            onClick={() => setPlatformFilter(filter.value)}
+            className={cn(
+              "h-8 rounded-full border px-3.5 text-sm transition",
+              platformFilter === filter.value
+                ? "border-foreground bg-foreground text-background"
+                : "bg-background hover:bg-accent"
+            )}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
 
-            return (
-              <button
-                key={phone.id}
-                type="button"
-                disabled={offline}
-                onClick={() =>
-                  openPhoneDialog(phone.id, isBorrowed ? "manage" : "borrow")
-                }
-                className={cn(
-                  "group flex h-full flex-col rounded-xl border-2 p-4 text-left sm:p-5 shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  isBorrowed
-                    ? "border-red-300 bg-red-50 hover:border-red-400"
-                    : "border-emerald-300 bg-emerald-50 hover:border-emerald-400"
-                )}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      {PLATFORM_LABELS[phone.platform]}
-                    </p>
-                    <h2 className="mt-1 text-2xl font-semibold">
-                      {phone.label}
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
-                      {phone.model} · {phone.color}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex flex-1 items-center justify-between">
-                  <div className="flex-1 space-y-2.5 text-sm">
-                    {isBorrowed ? (
-                      <>
-                        <div>
-                          <p className="text-[11px] text-muted-foreground">
-                            대여자
-                          </p>
-                          <p className="text-sm font-semibold">
-                            {borrower
-                              ? `${borrower.name} · ${borrower.organization}`
-                              : "삭제된 대여자"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[11px] text-muted-foreground">
-                            대여 시작
-                          </p>
-                          <p>{formatDateTime(state.currentLoan?.borrowedAt)}</p>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-sm font-semibold text-primary">
-                          탭하여 대여자를 선택하세요
-                        </p>
-                        <div className="rounded-lg bg-muted/40 p-2.5">
-                          <p className="text-[11px] text-muted-foreground">
-                            마지막 반납
-                          </p>
-                          <p className="text-xs font-medium sm:text-sm">
-                            {state.lastReturn
-                              ? formatDateTime(state.lastReturn.returnedAt)
-                              : "기록 없음"}
-                          </p>
-                          {state.lastReturn && (
-                            <p className="text-[11px] text-muted-foreground">
-                              {lastBorrower
-                                ? `${lastBorrower.name} · ${lastBorrower.organization}`
-                                : "삭제된 대여자"}
-                            </p>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="flex-shrink-0">
-                    <Image
-                      src={phone.image}
-                      alt={`${phone.model} ${phone.color}`}
-                      width={imageSize.width}
-                      height={imageSize.height}
-                      className="h-[calc(var(--phone-img-h)*0.7)] w-auto max-w-[40vw] object-contain sm:h-[var(--phone-img-h)] sm:max-w-none"
-                      style={
-                        {
-                          "--phone-img-h": `${displayHeight}px`,
-                        } as React.CSSProperties
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-3 text-right">
-                  <span
-                    className={cn(
-                      "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold",
-                      isBorrowed
-                        ? "border-red-300 bg-red-100 text-red-700"
-                        : "border-emerald-300 bg-emerald-100 text-emerald-700"
-                    )}
-                  >
-                    {isBorrowed ? "대여 중" : "대여 가능"}
-                  </span>
-                </div>
-
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  {isBorrowed
-                    ? "누르면 반납하거나 대여자를 변경할 수 있어요."
-                    : "누르면 대여자를 선택해 대여할 수 있어요."}
-                </p>
-              </button>
-            );
-          }
-
-          return (
-            <div
-              key="borrower-card"
-              className="flex h-full flex-col justify-between rounded-xl border p-5 shadow-sm"
-            >
-              <div className="space-y-3">
-                <h2 className="text-lg font-semibold">대여자 관리</h2>
-                <p className="text-sm text-muted-foreground">
-                  대여 가능 인원을 등록하고 관리하세요.
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                <Button
-                  className="w-full"
-                  size="sm"
-                  onClick={() => setBorrowerDialogOpen(true)}
+      <section aria-labelledby="available-heading" className="flex flex-col gap-3">
+        <h2
+          id="available-heading"
+          className="flex items-center gap-2 text-base font-semibold"
+        >
+          <span className="size-2.5 rounded-full bg-status-ok" aria-hidden />
+          지금 빌릴 수 있어요
+          <span className="font-mono text-sm text-muted-foreground tabular-nums">
+            {availablePhones.length}
+          </span>
+        </h2>
+        {availablePhones.length === 0 ? (
+          <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+            지금 빌릴 수 있는 폰이 없어요.
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))]">
+            {availablePhones.map((phone) => {
+              const state = ensurePhoneState(phones, phone.id);
+              const lastBorrower = getBorrower(state.lastReturn?.borrowerId);
+              const lastReturn = state.lastReturn
+                ? `${formatShortDateTime(state.lastReturn.returnedAt)} · ${
+                    lastBorrower?.name ?? "삭제된 대여자"
+                  }`
+                : "기록 없음";
+              return (
+                <PhoneTile
+                  key={phone.id}
+                  phone={phone}
+                  lastReturn={lastReturn}
+                  actionLabel={me ? `${me.name} 님으로 빌리기` : "빌리기"}
                   disabled={offline}
-                >
-                  대여자 등록하기
-                </Button>
-
-                <div className="space-y-1.5 text-xs sm:text-sm">
-                  <p className="font-semibold">대여 규칙</p>
-                  <p>· 반드시 대여를 신청하고 대여합니다.</p>
-                  <p>· 반납 시에는 직접 반납하기 버튼을 눌러 처리합니다.</p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+                  flash={flashPhoneId === phone.id}
+                  onBorrow={() => openPhoneDialog(phone.id, "borrow")}
+                />
+              );
+            })}
+          </div>
+        )}
       </section>
+
+      <section aria-labelledby="loaned-heading" className="flex flex-col gap-3">
+        <h2
+          id="loaned-heading"
+          className="flex items-center gap-2 text-base font-semibold"
+        >
+          <span className="size-2.5 rounded-full bg-status-busy" aria-hidden />
+          대여 중
+          <span className="font-mono text-sm text-muted-foreground tabular-nums">
+            {loanedPhones.length}
+          </span>
+          <span className="ml-auto text-xs font-normal text-muted-foreground">
+            오래 빌린 순
+          </span>
+        </h2>
+        {loanedPhones.length === 0 ? (
+          <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+            대여 중인 폰이 없어요.
+          </p>
+        ) : (
+          <ul className="overflow-hidden rounded-xl border">
+            {loanedPhones.map((phone) => {
+              const loan = ensurePhoneState(phones, phone.id).currentLoan!;
+              const borrower = getBorrower(loan.borrowerId);
+              const days = loanDays(loan.borrowedAt, currentTime);
+              return (
+                <LoanRow
+                  key={phone.id}
+                  phone={phone}
+                  borrowerName={borrower?.name ?? "삭제된 대여자"}
+                  borrowerOrg={borrower?.organization}
+                  borrowedAt={formatShortDateTime(loan.borrowedAt)}
+                  days={days}
+                  long={days >= LONG_LOAN_DAYS}
+                  confirmingReturn={returnConfirmPhoneId === phone.id}
+                  disabled={offline || busy}
+                  flash={flashPhoneId === phone.id}
+                  onTransfer={() => openPhoneDialog(phone.id, "manage")}
+                  onAskReturn={() => setReturnConfirmPhoneId(phone.id)}
+                  onCancelReturn={() => setReturnConfirmPhoneId(null)}
+                  onConfirmReturn={() => finalizeReturn(phone.id)}
+                />
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <footer className="flex flex-col gap-3 border-t pt-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-0.5">
+          <p>· 반드시 대여를 신청하고 대여합니다. 반납은 반납 버튼으로 처리합니다.</p>
+          <p>· 오른쪽에 있는 종이는 쓰지 않으셔도 됩니다. 구시대의 유물입니다.</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="self-start sm:self-auto"
+          onClick={() => setBorrowerDialogOpen(true)}
+          disabled={offline}
+        >
+          대여자 관리
+        </Button>
+      </footer>
 
       <Dialog
         open={phoneDialogOpen}
         onOpenChange={(open) => !open && closePhoneDialog()}
       >
-        <DialogContent className="max-w-3xl sm:max-w-4xl">
+        <DialogContent
+          className="max-w-2xl"
+          onOpenAutoFocus={(event) => {
+            // On the shared tablet, focusing the search box pops the keyboard
+            // over the borrower list; most people tap a name instead.
+            if (window.matchMedia("(pointer: coarse)").matches) {
+              event.preventDefault();
+            }
+          }}
+        >
           <DialogHeader>
-            <DialogTitle>
+            <div className="flex items-center gap-3">
+              {dialogPhone && (
+                <DeviceImage
+                  phone={dialogPhone}
+                  className="h-24 w-20 shrink-0 rounded-md p-1.5"
+                />
+              )}
+              <div className="flex flex-col gap-1 text-left">
+                <DialogTitle>
+                  {dialogPhone?.model}{" "}
+                  {phoneDialogMode === "manage" ? "대여자 변경" : "빌리기"}
+                </DialogTitle>
+                {dialogPhone && <DeviceSpec phone={dialogPhone} />}
+              </div>
+            </div>
+            <DialogDescription className="text-left">
               {phoneDialogMode === "manage"
-                ? `${currentDialogPhone?.id.toUpperCase()} 대여 관리`
-                : `${currentDialogPhone?.id.toUpperCase()} 대여하기`}
-            </DialogTitle>
-            <DialogDescription>
-              {phoneDialogMode === "manage"
-                ? "대여 중인 정보를 확인하고 반납 또는 대여자 변경을 진행하세요."
-                : "대여자를 선택해 대여를 시작합니다."}
+                ? "새로 빌릴 사람을 고르거나 반납하세요."
+                : "누구 이름으로 빌릴지 고르세요."}
             </DialogDescription>
           </DialogHeader>
 
           {phoneDialogMode === "manage" && currentDialogPhone?.currentLoan && (
-            <div className="space-y-3 rounded-lg border bg-muted/30 p-4 text-sm">
-              <div>
-                <p className="text-xs text-muted-foreground">현재 대여자</p>
-                <p className="text-base font-semibold">
-                  {(() => {
-                    const borrower = getBorrower(
-                      currentDialogPhone.currentLoan?.borrowerId
-                    );
-                    return borrower
-                      ? `${borrower.name} · ${borrower.organization}`
-                      : "삭제된 대여자";
-                  })()}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">대여 시작</p>
-                <p>
-                  {formatDateTime(currentDialogPhone.currentLoan.borrowedAt)}
-                </p>
+            <div className="space-y-1 rounded-lg border bg-muted/30 p-3 text-sm">
+              <p className="text-xs text-muted-foreground">현재 대여자</p>
+              <p className="font-semibold">
+                {(() => {
+                  const borrower = getBorrower(
+                    currentDialogPhone.currentLoan?.borrowerId
+                  );
+                  return borrower
+                    ? `${borrower.name} · ${borrower.organization}`
+                    : "삭제된 대여자";
+                })()}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {formatDateTime(currentDialogPhone.currentLoan.borrowedAt)} 대여
+              </p>
+            </div>
+          )}
+
+          {borrowers.length === 0 ? (
+            <p className="rounded-lg border p-4 text-sm text-muted-foreground">
+              먼저 대여자를 등록해야 대여를 진행할 수 있습니다.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <label
+                htmlFor="borrower-search"
+                className="flex items-center gap-2 rounded-md border bg-background px-3"
+              >
+                <Search className="size-4 text-muted-foreground" aria-hidden />
+                <span className="sr-only">대여자 이름으로 찾기</span>
+                <input
+                  id="borrower-search"
+                  type="search"
+                  value={borrowerQuery}
+                  onChange={(event) => setBorrowerQuery(event.target.value)}
+                  placeholder="이름이나 소속으로 찾기"
+                  autoComplete="off"
+                  className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none"
+                />
+              </label>
+              <div className="flex max-h-[50dvh] flex-col gap-3 overflow-y-auto sm:max-h-[420px]">
+                {recentBorrowers.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs text-muted-foreground">
+                      최근 빌린 사람
+                    </Label>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {recentBorrowers.map(renderBorrowerOption)}
+                    </div>
+                  </div>
+                )}
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs text-muted-foreground">전체</Label>
+                  {filteredBorrowers.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      &ldquo;{query}&rdquo;와 맞는 대여자가 없습니다.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {filteredBorrowers.map(renderBorrowerOption)}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
 
-          <div className="space-y-3">
-            <Label>대여자 선택</Label>
-            <div className="max-h-[50dvh] overflow-y-auto rounded-xl border p-2 sm:max-h-[480px] sm:p-4">
-              {borrowers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  먼저 대여자를 등록해야 대여를 진행할 수 있습니다.
-                </p>
-              ) : (
-                <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-                  {borrowers.map((borrower) => (
-                    <button
-                      key={borrower.id}
-                      type="button"
-                      onClick={() => setSelectedBorrowerId(borrower.id)}
-                      className={cn(
-                        "flex h-full flex-col justify-between rounded-lg border p-2.5 text-left shadow-sm transition sm:p-3",
-                        effectiveSelectedBorrowerId === borrower.id
-                          ? "border-primary bg-primary/5 text-primary"
-                          : "hover:border-primary/60"
-                      )}
-                    >
-                      <div>
-                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                          {borrower.organization}
-                        </p>
-                        <p className="mt-1 text-sm font-semibold text-foreground">
-                          {borrower.name}
-                        </p>
-                      </div>
-                      {effectiveSelectedBorrowerId === borrower.id && (
-                        <span className="mt-2 text-[10px] font-semibold uppercase text-primary">
-                          선택됨
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          {phoneDialogMode === "borrow" &&
+            selectedBorrower &&
+            selectedBorrower.id !== me?.id && (
+              <label
+                htmlFor="remember-me"
+                className="flex items-center gap-2 text-sm text-muted-foreground"
+              >
+                <input
+                  id="remember-me"
+                  type="checkbox"
+                  checked={rememberChoice}
+                  onChange={(event) => setRememberChoice(event.target.checked)}
+                  className="size-4 accent-foreground"
+                />
+                이 브라우저에서는 {selectedBorrower.name} 님을 기본으로 선택
+                (공용 태블릿에서는 켜지 마세요)
+              </label>
+            )}
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={closePhoneDialog}>
@@ -682,7 +858,13 @@ export default function Home() {
             {phoneDialogMode === "manage" ? (
               <>
                 <Button
-                  variant="secondary"
+                  variant="ghost"
+                  onClick={handleManualReturn}
+                  disabled={offline || busy}
+                >
+                  반납하기
+                </Button>
+                <Button
                   onClick={handleTransferLoan}
                   disabled={
                     offline ||
@@ -692,14 +874,11 @@ export default function Home() {
                       currentDialogPhone?.currentLoan?.borrowerId
                   }
                 >
-                  대여자 변경
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={handleManualReturn}
-                  disabled={offline || busy}
-                >
-                  반납하기
+                  {selectedBorrower &&
+                  effectiveSelectedBorrowerId !==
+                    currentDialogPhone?.currentLoan?.borrowerId
+                    ? `${selectedBorrower.name} 님으로 변경`
+                    : "대여자 변경"}
                 </Button>
               </>
             ) : (
@@ -712,7 +891,9 @@ export default function Home() {
                   borrowers.length === 0
                 }
               >
-                대여 시작
+                {selectedBorrower
+                  ? `${selectedBorrower.name} 님 이름으로 빌리기`
+                  : "빌릴 사람을 고르세요"}
               </Button>
             )}
           </DialogFooter>
@@ -888,40 +1069,6 @@ export default function Home() {
               disabled={!bannerInput.trim() || offline || busy}
             >
               추가하기
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={returnConfirmPhoneId !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setReturnConfirmPhoneId(null);
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>충전기 연결 확인</DialogTitle>
-            <DialogDescription>
-              반납 전에 충전기를 연결했는지 확인해 주세요.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="rounded-lg border bg-muted/40 p-4 text-sm">
-            <p className="font-medium">충전기를 연결하셨나요?</p>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setReturnConfirmPhoneId(null)}
-            >
-              아직이에요
-            </Button>
-            <Button onClick={finalizeReturn} disabled={offline || busy}>
-              충전 완료
             </Button>
           </DialogFooter>
         </DialogContent>
