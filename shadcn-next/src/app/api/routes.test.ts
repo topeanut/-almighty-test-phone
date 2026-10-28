@@ -118,19 +118,25 @@ describe("API 라우트", () => {
     await expectError(res, 400);
   });
 
-  it("배너 삭제와 없는 배너 404", async () => {
-    await addBanner(json({ message: "bye" }));
-    const res = await deleteBanner(json({ message: "bye" }));
-    expect((await res.json()).bannerMessages).not.toContain("bye");
-    await expectError(await deleteBanner(json({ message: "bye" })), 404);
-  });
-
   it("중복 배너는 200이며 중복 추가되지 않는다", async () => {
     await addBanner(json({ message: "hi" }));
     const res = await addBanner(json({ message: "hi" }));
     expect(res.status).toBe(200);
     const msgs: string[] = (await res.json()).bannerMessages;
     expect(msgs.filter((m) => m === "hi")).toHaveLength(1);
+  });
+
+  it("배너 삭제", async () => {
+    await addBanner(json({ message: "hi" }));
+    const delBanner = (message: unknown) =>
+      deleteBanner(
+        new Request("http://local/x", { method: "DELETE", body: JSON.stringify({ message }) })
+      );
+    const res = await delBanner("hi");
+    expect(res.status).toBe(200);
+    expect((await res.json()).bannerMessages).not.toContain("hi");
+    await expectError(await delBanner("hi"), 404);
+    await expectError(await delBanner(""), 400);
   });
 
   it("존재하지 않는 대여자로 대여/이관은 404", async () => {

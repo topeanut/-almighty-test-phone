@@ -38,35 +38,39 @@ export function LoanRow({
   return (
     <li
       className={cn(
-        "flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-3 py-2.5 last:border-b-0",
+        "flex flex-col gap-3 border-b px-3 py-3 last:border-b-0 sm:flex-row sm:items-center sm:gap-4 sm:py-2.5",
         loanTone(days),
         flash && "motion-safe:animate-flash"
       )}
     >
-      <DeviceImage phone={phone} className="h-16 w-12 shrink-0 rounded-md p-1" />
-      <div className="flex min-w-[8.5rem] flex-col gap-0.5">
-        <span className="text-sm font-semibold leading-tight">{phone.model}</span>
-        <DeviceSpec phone={phone} />
-      </div>
-      <div className="min-w-[7rem] flex-1 text-sm leading-snug">
-        <span className="font-semibold">{borrowerName}</span>
-        <span className="block text-xs text-muted-foreground">
-          {borrowerOrg ? `${borrowerOrg} · ` : ""}
-          {borrowedAt} 대여
+      <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
+        <DeviceImage phone={phone} className="h-16 w-12 shrink-0 rounded-md p-1" />
+        <div className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
+          <div className="flex min-w-[8.5rem] flex-col gap-0.5">
+            <span className="text-sm font-semibold leading-tight">{phone.model}</span>
+            <DeviceSpec phone={phone} />
+          </div>
+          <div className="min-w-0 flex-1 text-sm leading-snug">
+            <span className="font-semibold">{borrowerName}</span>
+            <span className="block text-xs text-muted-foreground">
+              {borrowerOrg ? `${borrowerOrg} · ` : ""}
+              {borrowedAt} 대여
+            </span>
+          </div>
+        </div>
+        <span
+          className={cn(
+            "min-w-[3.5rem] self-start text-right font-mono text-sm tabular-nums sm:self-center",
+            long ? "font-semibold text-status-busy" : "text-muted-foreground"
+          )}
+        >
+          {days === 0 ? "오늘" : `${days}일째`}
         </span>
       </div>
-      <span
-        className={cn(
-          "min-w-[3.5rem] text-right font-mono text-sm tabular-nums",
-          long ? "font-semibold text-status-busy" : "text-muted-foreground"
-        )}
-      >
-        {days === 0 ? "오늘" : `${days}일째`}
-      </span>
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 [&>button]:flex-1 sm:[&>button]:flex-none">
         {confirmingReturn ? (
           <>
-            <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+            <span className="w-full text-sm font-semibold text-amber-700 dark:text-amber-300 sm:w-auto">
               충전기 꽂았나요?
             </span>
             <Button variant="ghost" className="h-10" onClick={onCancelReturn}>

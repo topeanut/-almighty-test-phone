@@ -47,7 +47,7 @@ export function DeviceImage({
         alt=""
         width={phone.imageSize.width}
         height={phone.imageSize.height}
-        className="h-full w-auto max-w-full object-contain mix-blend-multiply"
+        className="size-full object-contain mix-blend-multiply"
       />
     </span>
   );
