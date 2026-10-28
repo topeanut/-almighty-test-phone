@@ -94,6 +94,9 @@ export class Store {
   }
 
   private seed() {
+    // user_version 1 = 기본 문구를 이미 심은 DB. 사용자가 배너를 다 지워도 다시 심지 않는다.
+    if (this.db.pragma("user_version", { simple: true }) !== 0) return;
+    this.db.pragma("user_version = 1");
     const count = this.db
       .prepare("SELECT COUNT(*) AS c FROM banner_messages")
       .get() as { c: number };
@@ -252,6 +255,14 @@ export class Store {
         .run(MAX_BANNERS);
       return this.getState();
     })();
+  }
+
+  deleteBanner(message: string): AppState {
+    const { changes } = this.db
+      .prepare("DELETE FROM banner_messages WHERE message = ?")
+      .run(message);
+    if (changes === 0) throw new StoreError(404, "이미 지워진 배너입니다.");
+    return this.getState();
   }
 
   close() {

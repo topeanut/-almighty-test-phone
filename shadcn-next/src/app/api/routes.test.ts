@@ -10,7 +10,7 @@ import { POST as transfer } from "@/app/api/phones/[id]/transfer/route";
 import { POST as returnPhone } from "@/app/api/phones/[id]/return/route";
 import { POST as addBorrower } from "@/app/api/borrowers/route";
 import { DELETE as deleteBorrower } from "@/app/api/borrowers/[id]/route";
-import { POST as addBanner } from "@/app/api/banner/route";
+import { POST as addBanner, DELETE as deleteBanner } from "@/app/api/banner/route";
 
 let dir: string;
 
@@ -124,6 +124,19 @@ describe("API 라우트", () => {
     expect(res.status).toBe(200);
     const msgs: string[] = (await res.json()).bannerMessages;
     expect(msgs.filter((m) => m === "hi")).toHaveLength(1);
+  });
+
+  it("배너 삭제", async () => {
+    await addBanner(json({ message: "hi" }));
+    const delBanner = (message: unknown) =>
+      deleteBanner(
+        new Request("http://local/x", { method: "DELETE", body: JSON.stringify({ message }) })
+      );
+    const res = await delBanner("hi");
+    expect(res.status).toBe(200);
+    expect((await res.json()).bannerMessages).not.toContain("hi");
+    await expectError(await delBanner("hi"), 404);
+    await expectError(await delBanner(""), 400);
   });
 
   it("존재하지 않는 대여자로 대여/이관은 404", async () => {

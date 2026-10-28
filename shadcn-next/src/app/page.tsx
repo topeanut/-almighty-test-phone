@@ -391,10 +391,7 @@ export default function Home() {
     const message = bannerInput.trim();
     if (!message) return;
     const ok = await runAction(() => api.addBanner(message));
-    if (ok) {
-      setBannerInput("");
-      setBannerDialogOpen(false);
-    }
+    if (ok) setBannerInput("");
   };
 
   const handleAddBorrower = async () => {
@@ -599,7 +596,7 @@ export default function Home() {
             onClick={() => setBannerDialogOpen(true)}
             disabled={offline}
           >
-            롤링 배너 추가하기
+            롤링 배너 관리
           </Button>
         </div>
       </header>
@@ -1035,13 +1032,36 @@ export default function Home() {
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>응원 문구 추가</DialogTitle>
+            <DialogTitle>롤링 배너 관리</DialogTitle>
             <DialogDescription>
-              롤링 배너에 표시할 문구를 입력해 주세요.
+              최대 5개까지 돌아가며 보입니다. 넘치면 오래된 문구부터 내려갑니다.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
+            {bannerMessages.length === 0 ? (
+              <p className="text-sm text-muted-foreground">지금 걸린 배너가 없습니다.</p>
+            ) : (
+              <ul className="space-y-2">
+                {bannerMessages.map((message) => (
+                  <li
+                    key={message}
+                    className="flex items-center justify-between gap-2 rounded-lg border p-3"
+                  >
+                    <span className="min-w-0 break-words text-sm">{message}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => runAction(() => api.deleteBanner(message))}
+                      disabled={offline || busy}
+                    >
+                      삭제
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="grid gap-2">
               <Label htmlFor="banner-message">응원 문구</Label>
               <Input
@@ -1062,7 +1082,7 @@ export default function Home() {
               variant="outline"
               onClick={() => setBannerDialogOpen(false)}
             >
-              취소
+              닫기
             </Button>
             <Button
               onClick={handleAddBannerMessage}
